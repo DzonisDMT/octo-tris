@@ -94,8 +94,8 @@ const COL=['#e8601c','#f58a3c','#c93f2a','#ffb36b','#7a2e5a','#2b5a8a','#f0d36a'
 const SH=[[[1,1,1,1]],[[1,1],[1,1]],[[0,1,0],[1,1,1]],[[0,1,1],[1,1,0]],[[1,1,0],[0,1,1]],[[1,0,0],[1,1,1]],[[0,0,1],[1,1,1]]];
 let bd,p,nxt,score,lines,level,state='title',acc=0,last=0,bag=[],best=0;
 let nickname='Player',gamesPlayed=0,leaderPeriod='daily',lastScoreSubmitted=0;
-const SUPABASE_URL=window.OCTOTRIS_SUPABASE_URL||'';
-const SUPABASE_ANON_KEY=window.OCTOTRIS_SUPABASE_ANON_KEY||'';
+const SUPABASE_URL='https://tverxdvmxclhunvmojaf.supabase.co';
+const SUPABASE_ANON_KEY='sb_publishable__pDaXKlhJ9tH74hY_o96GQ_N8oS2B_Z';
 try{nickname=localStorage.getItem('octo-nickname')||'Player';gamesPlayed=+(localStorage.getItem('octo-games')||0);$('nickname').value=nickname}catch(e){}
 let AC,mute=false;
 const unlock=()=>{try{if(!AC)AC=new(window.AudioContext||window.webkitAudioContext)();if(AC.state!=='running')AC.resume()}catch(e){}};
