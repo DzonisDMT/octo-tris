@@ -39,6 +39,21 @@ canvas{display:block;width:100%;border:2px solid var(--ink)}
 .hint{text-align:center;font-size:6px;color:#7a7460;margin-top:18px;line-height:1.8}
 #bP{font:inherit;font-size:8px;background:#8a8268;color:#efe9d6;border:0;border-radius:10px;padding:9px 18px;margin-bottom:8px;transform:rotate(-12deg)}
 #mu{font:inherit;font-size:7px;background:none;border:0;color:var(--btn);padding:0}
+
+#lbBtn{font:inherit;font-size:6px;background:#8a8268;color:#efe9d6;border:0;border-radius:8px;padding:8px 10px;margin-left:6px}
+#lbModal{display:none;position:fixed;z-index:20;inset:0;background:rgba(0,0,0,.82);align-items:center;justify-content:center;padding:14px;font-family:'Press Start 2P','Courier New',monospace}
+#lbModal.open{display:flex}
+.lbPanel{width:min(100%,390px);max-height:88dvh;overflow:auto;background:#cbc4ab;color:#1d3a1d;border:5px solid #7a7460;border-radius:14px;padding:14px;box-shadow:0 8px 0 #655e4b}
+.lbPanel h2{font-size:12px;color:#7a2e45;text-align:center;margin:4px 0 14px}
+.lbPanel label{display:block;font-size:7px;margin:10px 0 6px}
+.lbPanel input{width:100%;font:10px 'Press Start 2P',monospace;padding:10px;border:2px solid #596b2d;background:#e2e9b7;color:#1d3a1d;border-radius:5px;user-select:text}
+.lbActions{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.lbActions button{font:7px 'Press Start 2P',monospace;padding:9px 7px;border:0;border-radius:5px;background:#7a2e45;color:#fff}
+.lbActions button.active{background:#1d3a1d}
+#lbRows{font:7px 'Press Start 2P',monospace;line-height:2;max-height:34dvh;overflow:auto;background:#a3c243;padding:8px;border:2px solid #596b2d}
+.lbRow{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed #61752c;padding:4px 0}
+#lbStatus{font:7px 'Press Start 2P',monospace;line-height:1.8;margin-top:9px;overflow-wrap:anywhere}
+.lbClose{float:right;background:#7a7460!important}
 </style></head><body>
 <div class="gb">
   <div class="top"><span>OCTO-TRIS</span><button id="mu">SND ON</button></div>
@@ -64,6 +79,14 @@ canvas{display:block;width:100%;border:2px solid var(--ink)}
   </div>
   <div class="hint"><button id="bP">PAUSE</button><br>A TURN &middot; B TURN BACK &middot; &#9650; DROP</div>
 </div>
+  <div class="hint"><button id="lbBtn">LEADERBOARD / PLAYER</button></div>
+</div>
+<div id="lbModal"><div class="lbPanel"><button class="lbClose" id="lbClose">CLOSE</button><h2>OCTO-TRIS LEADERBOARD</h2>
+<label for="nickname">PLAYER NICKNAME</label><input id="nickname" maxlength="16" autocomplete="nickname" placeholder="Your nickname">
+<div class="lbActions"><button id="saveNick">SAVE NAME</button><button id="tabDaily" class="active">DAILY</button><button id="tabWeekly">WEEKLY</button><button id="tabAll">ALL TIME</button></div>
+<div id="lbRows">Loading scores...</div><div id="lbStatus"></div>
+<div class="lbActions"><button id="shareScore">SHARE SCORE ON X</button></div>
+</div></div>
 <script>
 const W=10,H=20,C=20;
 const $=id=>document.getElementById(id);
@@ -72,6 +95,10 @@ cv.width=W*C;cv.height=H*C;
 const COL=['#e8601c','#f58a3c','#c93f2a','#ffb36b','#7a2e5a','#2b5a8a','#f0d36a'];
 const SH=[[[1,1,1,1]],[[1,1],[1,1]],[[0,1,0],[1,1,1]],[[0,1,1],[1,1,0]],[[1,1,0],[0,1,1]],[[1,0,0],[1,1,1]],[[0,0,1],[1,1,1]]];
 let bd,p,nxt,score,lines,level,state='title',acc=0,last=0,bag=[],best=0;
+let nickname='Player',gamesPlayed=0,leaderPeriod='daily',lastScoreSubmitted=0;
+const SUPABASE_URL=window.OCTOTRIS_SUPABASE_URL||'';
+const SUPABASE_ANON_KEY=window.OCTOTRIS_SUPABASE_ANON_KEY||'';
+try{nickname=localStorage.getItem('octo-nickname')||'Player';gamesPlayed=+(localStorage.getItem('octo-games')||0);$('nickname').value=nickname}catch(e){}
 let AC,mute=false;
 const unlock=()=>{try{if(!AC)AC=new(window.AudioContext||window.webkitAudioContext)();if(AC.state!=='running')AC.resume()}catch(e){}};
 ['pointerdown','pointerup','touchend','keydown'].forEach(ev=>addEventListener(ev,unlock,true));
@@ -130,6 +157,7 @@ function lock(){sfx('lock');
 function hud(){$('sc').textContent=score;$('ln').textContent=lines;$('lv').textContent=level}
 function show(h){ov.innerHTML=h;ov.classList.remove('hide')}
 function start(){
+  gamesPlayed++;try{localStorage.setItem('octo-games',gamesPlayed)}catch(e){}
   bd=Array.from({length:H},()=>Array(W).fill(0));
   score=0;lines=0;level=1;nxt=null;acc=0;hud();
   spawn();state='play';ov.classList.add('hide');sfx('start');mascot();
@@ -137,7 +165,8 @@ function start(){
 function end(){
   state='over';sfx('over');
   if(score>best){best=score;try{localStorage.setItem('octo-best',best)}catch(e){}}
-  show('<h1>INKED OUT!</h1><div>SCORE '+score+'<br>BEST '+best+'</div><div>PRESS A</div>');
+  submitScore(score);
+  show('<h1>INKED OUT!</h1><div>SCORE '+score+'<br>BEST '+best+'<br>GAMES '+gamesPlayed+'</div><div>PRESS A</div><div style="font-size:7px">PLAYER '+escapeHtml(nickname)+'</div><div style="font-size:7px">LEADERBOARD BUTTON BELOW</div>');
 }
 function down(manual){
   if(!hit(p.m,p.x,p.y+1)){p.y++;if(manual)score++;hud()}else lock();
@@ -221,6 +250,48 @@ addEventListener('keydown',e=>{
   const m={ArrowLeft:'L',ArrowRight:'R',ArrowDown:'D',ArrowUp:'A',x:'A',' ':'U',p:'P',z:'Z',Enter:'A'}[e.key];
   if(m){e.preventDefault();act(m)}
 });
+
+function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function saveNickname(){
+  const v=$('nickname').value.trim().replace(/[^a-zA-Z0-9 _-]/g,'').slice(0,16);
+  if(!v){$('lbStatus').textContent='Enter a nickname first.';return}
+  nickname=v;$('nickname').value=v;
+  try{localStorage.setItem('octo-nickname',v)}catch(e){}
+  $('lbStatus').textContent='Nickname saved on this device.';
+}
+async function sb(path,options={}){
+  if(!SUPABASE_URL||!SUPABASE_ANON_KEY)throw new Error('Global leaderboard is not connected yet. Supabase setup is required.');
+  const r=await fetch(SUPABASE_URL.replace(/\/$/,'')+'/rest/v1/'+path,{...options,headers:{apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json',...(options.headers||{})}});
+  if(!r.ok)throw new Error('Leaderboard request failed ('+r.status+').');
+  return r.status===204?null:r.json();
+}
+async function submitScore(value){
+  if(!SUPABASE_URL||!SUPABASE_ANON_KEY||!nickname||value<=0)return;
+  try{await sb('octotris_scores',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({nickname,score:value,lines:lines,level:level})});lastScoreSubmitted=value}
+  catch(e){console.warn(e)}
+}
+async function loadLeaderboard(period){
+  leaderPeriod=period;
+  ['Daily','Weekly','All'].forEach(k=>$('tab'+k).classList.toggle('active',k.toLowerCase()===period||k==='All'&&period==='all'));
+  $('lbRows').textContent='Loading...';
+  try{
+    const since=period==='daily'?new Date(Date.now()-86400000).toISOString():period==='weekly'?new Date(Date.now()-7*86400000).toISOString():null;
+    const query='select=nickname,score,created_at&order=score.desc&limit=20'+(since?'&created_at=gte.'+encodeURIComponent(since):'');
+    const rows=await sb('octotris_scores?'+query);
+    $('lbRows').innerHTML=rows.length?rows.map((r,i)=>'<div class="lbRow"><span>'+(i+1)+'. '+escapeHtml(r.nickname)+'</span><b>'+Number(r.score).toLocaleString()+'</b></div>').join(''):'No scores yet. Be the first!';
+    $('lbStatus').textContent='Your best: '+best+' · Games played on this device: '+gamesPlayed;
+  }catch(e){$('lbRows').textContent='Global leaderboard is not connected yet.';$('lbStatus').textContent=e.message+' Your personal best and games played are saved locally.'}
+}
+function openLeaderboard(){ $('lbModal').classList.add('open');$('nickname').value=nickname;loadLeaderboard(leaderPeriod)}
+$('lbBtn').onclick=openLeaderboard;
+$('lbClose').onclick=()=>$('lbModal').classList.remove('open');
+$('lbModal').addEventListener('click',e=>{if(e.target===$('lbModal'))$('lbModal').classList.remove('open')});
+$('saveNick').onclick=()=>{saveNickname();loadLeaderboard(leaderPeriod)};
+$('tabDaily').onclick=()=>loadLeaderboard('daily');
+$('tabWeekly').onclick=()=>loadLeaderboard('weekly');
+$('tabAll').onclick=()=>loadLeaderboard('all');
+$('shareScore').onclick=()=>{const text='I scored '+(score||best)+' in OCTO-TRIS! Can you beat me?';window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(text),'_blank','noopener')};
+
 mascot();show('<h1>OCTO-TRIS</h1><div>STACK THE ARMS<br>CLEAR THE INK</div><div>PRESS A</div>');
 requestAnimationFrame(loop);
 </script></body></html>
