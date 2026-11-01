@@ -143,8 +143,12 @@ const goldenHit=(m,px,py)=>{let h=false;each(m,(r,c)=>{const a=px+c,b=py+r;if(a<
 const pieceHit=(m,px,py)=>p?.special==='golden'?goldenHit(m,px,py):hit(m,px,py);
 const rot=m=>m[0].map((_,i)=>m.map(r=>r[i]).reverse());
 function spawn(){
-  if(pendingSpecials.length){const special=pendingSpecials.shift(),shape=rnd();p={m:shape.m,c:special==='rainbow'?1+Math.floor(Math.random()*7):7,special};powerStatus(special.toUpperCase()+' BRICK INCOMING!');tone(740,.16,'sine',.1,0,1100)}
-  else{p=nxt||rnd();nxt=rnd()}
+  if(pendingSpecials.length){
+    const special=pendingSpecials.shift();
+    if(special==='golden')p={m:[[1]],c:7,special};
+    else{const shape=rnd();p={m:shape.m,c:special==='rainbow'?1+Math.floor(Math.random()*7):7,special}}
+    powerStatus(special.toUpperCase()+' BRICK INCOMING!');tone(740,.16,'sine',.1,0,1100)
+  }else{p=nxt||rnd();nxt=rnd()}
   p.x=(W-p.m[0].length)>>1;p.y=0;
   if(hit(p.m,p.x,p.y))end();
 }
@@ -157,9 +161,17 @@ function lock(){sfx('lock');
     const shapeCells=[];each(p.m,(r,c)=>shapeCells.push([p.y+r,p.x+c]));
     const row=Math.max(0,Math.min(H-1,p.y+p.m.length-1)),col=Math.max(0,Math.min(W-1,p.x+Math.floor(p.m[0].length/2)));
     if(p.special==='golden'){
-      const r=Math.max(0,Math.min(H-1,p.y+p.m.length-1));
-      splat(r,'gold');bd.splice(r,1);bd.unshift(Array(W).fill(0));n=1;
-      powerStatus('GOLDEN BRICK! '+n+' ROWS CLEARED!');tone(1046,.24,'sine',.14,0,1568);
+      const col=Math.max(0,Math.min(W-1,p.x));
+      let target=-1;
+      for(let r=H-1;r>=0;r--)if(!bd[r][col]){target=r;break}
+      if(target>=0){
+        bd[target][col]={c:7,e:true};
+        if(bd[target].every(v=>v)){
+          splat(target,'gold');bd.splice(target,1);bd.unshift(Array(W).fill(0));n=1;
+          powerStatus('GOLDEN BRICK COMPLETED A ROW!');
+        }else powerStatus('GOLDEN BRICK SETTLED IN AN EMPTY SPACE!');
+      }else powerStatus('NO EMPTY SPACE FOR GOLDEN BRICK!');
+      tone(1046,.24,'sine',.14,0,1568);
     }else activateFallingPower(p.special,row,col,p.c,shapeCells);
   }else{
     each(p.m,(r,c,v)=>{if(p.y+r>=0)bd[p.y+r][p.x+c]={c:p.c,e:v==2}});
