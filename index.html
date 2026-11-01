@@ -282,7 +282,12 @@ $('mu').onclick=()=>{mute=!mute;$('mu').textContent=mute?'SND OFF':'SND ON'};
 ov.addEventListener('pointerdown',e=>{if(state==='title'&&e.target.closest('#startName,#startPlay'))return;if(state==='title'||state==='over')act('A');else if(state==='pause')pause()});
 addEventListener('keydown',e=>{
   if(e.key==='Enter'&&e.target&&e.target.id==='startName')return;
-  const m={ArrowLeft:'L',ArrowRight:'R',ArrowDown:'D',ArrowUp:mirrorActive?'U':'A',x:'A',' ':'U',p:'P',z:'Z',Enter:'A'}[e.key];
+  if(mirrorActive&&(e.key==='ArrowUp'||e.key==='ArrowDown')){
+    e.preventDefault();
+    if(state==='play'){if(e.key==='ArrowUp')turn();else down(true)}
+    return;
+  }
+  const m={ArrowLeft:'L',ArrowRight:'R',ArrowDown:'D',ArrowUp:'A',x:'A',' ':'U',p:'P',z:'Z',Enter:'A'}[e.key];
   if(m){e.preventDefault();act(m)}
 });
 
