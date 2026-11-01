@@ -244,8 +244,9 @@ function hold(el,k,rep){
 hold($('bL'),'L',1);hold($('bR'),'R',1);hold($('bD'),'D',1);
 hold($('bU'),'U');hold($('bA'),'A');hold($('bB'),'Z');hold($('bP'),'P');
 $('mu').onclick=()=>{mute=!mute;$('mu').textContent=mute?'SND OFF':'SND ON'};
-ov.addEventListener('pointerdown',()=>{if(state==='title'||state==='over')act('A');else if(state==='pause')pause()});
+ov.addEventListener('pointerdown',e=>{if(state==='title'&&e.target.closest('#startName,#startPlay'))return;if(state==='title'||state==='over')act('A');else if(state==='pause')pause()});
 addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&e.target&&e.target.id==='startName')return;
   const m={ArrowLeft:'L',ArrowRight:'R',ArrowDown:'D',ArrowUp:'A',x:'A',' ':'U',p:'P',z:'Z',Enter:'A'}[e.key];
   if(m){e.preventDefault();act(m)}
 });
