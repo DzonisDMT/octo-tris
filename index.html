@@ -158,6 +158,7 @@ function lock(){sfx('lock');
   }
   if(n){
     const oldLines=lines;sfx('clear',n);shake(n);score+=[0,100,300,500,800][n]*level;lines+=n;awardPowerups(oldLines,lines);
+    if(oldLines<2&&lines>=2&&!goldenBrickUsed){goldenBrickUsed=true;pendingSpecials.unshift('golden');powerStatus('GOLDEN BRICK UNLOCKED! NEXT PIECE!')}
     const ol=level;level=1+(lines/10|0);if(level>ol){setTimeout(()=>sfx('level'),450);mascot()}
     $('msg').textContent=p.special==='golden'?'GOLDEN ROW!':['','INK!','DOUBLE INK!','TRIPLE INK!','OCTO-INK!!'][n];
     setTimeout(()=>$('msg').textContent='',900);
