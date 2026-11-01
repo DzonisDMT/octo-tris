@@ -140,6 +140,7 @@ function rnd(){
 }
 const hit=(m,px,py)=>{let h=false;each(m,(r,c)=>{const a=px+c,b=py+r;if(a<0||a>=W||b>=H||(b>=0&&bd[b][a]))h=true});return h};
 const goldenHit=(m,px,py)=>{let h=false;each(m,(r,c)=>{const a=px+c,b=py+r;if(a<0||a>=W||b>=H)h=true});return h};
+const pieceHit=(m,px,py)=>p?.special==='golden'?goldenHit(m,px,py):hit(m,px,py);
 const rot=m=>m[0].map((_,i)=>m.map(r=>r[i]).reverse());
 function spawn(){
   if(pendingSpecials.length){const special=pendingSpecials.shift(),shape=rnd();p={m:shape.m,c:special==='rainbow'?1+Math.floor(Math.random()*7):7,special};powerStatus(special.toUpperCase()+' BRICK INCOMING!');tone(740,.16,'sine',.1,0,1100)}
@@ -149,15 +150,15 @@ function spawn(){
 }
 function startMirrorRoom(){if(mirrorRoomUsed)return;mirrorRoomUsed=true;mirrorActive=true;mirrorEnds=performance.now()+60000;mirrorBonus=0;powerStatus('MIRROR ROOM! 60 SECONDS · CONTROLS REVERSED · 2X SPEED');tone(220,.5,'sawtooth',.1,0,880)}
 function finishMirrorRoom(){if(!mirrorActive)return;mirrorActive=false;score+=mirrorBonus;mirrorEnds=0;powerStatus('MIRROR ROOM COMPLETE! +'+mirrorBonus+' BONUS POINTS');hud();tone(880,.35,'sine',.12,0,440)}
-function moveVertical(d){if(!hit(p.m,p.x,p.y+d)){p.y+=d;if(d>0)score+=1;hud()}else if(d>0)lock()}
+function moveVertical(d){if(!pieceHit(p.m,p.x,p.y+d)){p.y+=d;if(d>0)score+=1;hud()}else if(d>0)lock()}
 function lock(){sfx('lock');
   let n=0;
   if(p.special){
     const shapeCells=[];each(p.m,(r,c)=>shapeCells.push([p.y+r,p.x+c]));
     const row=Math.max(0,Math.min(H-1,p.y+p.m.length-1)),col=Math.max(0,Math.min(W-1,p.x+Math.floor(p.m[0].length/2)));
     if(p.special==='golden'){
-      const rows=[...new Set(shapeCells.map(([r])=>Math.max(0,Math.min(H-1,r))))];
-      rows.forEach(r=>{splat(r,'gold');bd.splice(r,1);bd.unshift(Array(W).fill(0));n++});
+      const r=Math.max(0,Math.min(H-1,p.y+p.m.length-1));
+      splat(r,'gold');bd.splice(r,1);bd.unshift(Array(W).fill(0));n=1;
       powerStatus('GOLDEN BRICK! '+n+' ROWS CLEARED!');tone(1046,.24,'sine',.14,0,1568);
     }else activateFallingPower(p.special,row,col,p.c,shapeCells);
   }else{
@@ -190,12 +191,12 @@ function end(){
   show('<h1>INKED OUT!</h1><div>SCORE '+score+'<br>BEST '+best+'<br>GAMES '+gamesPlayed+'</div><div>PRESS A</div><div style="font-size:7px">PLAYER '+escapeHtml(nickname)+'</div><div style="font-size:7px">LEADERBOARD BUTTON BELOW</div>');
 }
 function down(manual){
-  const blocked=p.special==='golden'?goldenHit(p.m,p.x,p.y+1):hit(p.m,p.x,p.y+1);
+  const blocked=pieceHit(p.m,p.x,p.y+1);
   if(!blocked){p.y++;if(manual)score++;hud()}else lock();
 }
-function drop(){sfx('drop');while(!(p.special==='golden'?goldenHit(p.m,p.x,p.y+1):hit(p.m,p.x,p.y+1))){p.y++;score+=2}hud();lock()}
-function move(d){const blocked=p.special==='golden'?goldenHit(p.m,p.x+d,p.y):hit(p.m,p.x+d,p.y);if(!blocked){p.x+=d;sfx('move')}}
-function turn(ccw){let r=rot(p.m);if(ccw)r=rot(rot(r));sfx('rot');for(const k of [0,-1,1,-2,2])if(!hit(r,p.x+k,p.y)){p.m=r;p.x+=k;break}}
+function drop(){sfx('drop');while(!pieceHit(p.m,p.x,p.y+1)){p.y++;score+=2}hud();lock()}
+function move(d){if(!pieceHit(p.m,p.x+d,p.y)){p.x+=d;sfx('move')}}
+function turn(ccw){let r=rot(p.m);if(ccw)r=rot(rot(r));sfx('rot');for(const k of [0,-1,1,-2,2])if(!pieceHit(r,p.x+k,p.y)){p.m=r;p.x+=k;break}}
 function pause(){
   if(state==='play'){state='pause';show('<h1>PAUSED</h1><div>PRESS ||</div>')}
   else if(state==='pause'){state='play';ov.classList.add('hide')}
@@ -254,7 +255,7 @@ function draw(){
   if(!bd)return;
   bd.forEach((r,j)=>r.forEach((v,i)=>v&&cell(x,i*C,j*C,v.c,v.e)));
   if(p&&state==='play'){
-    let gy=p.y;while(!hit(p.m,p.x,gy+1))gy++;
+    let gy=p.y;while(!pieceHit(p.m,p.x,gy+1))gy++;
     x.globalAlpha=.28;each(p.m,(r,c)=>pieceCell(x,(p.x+c)*C,(gy+r)*C,p,0));x.globalAlpha=1;
     each(p.m,(r,c,v)=>pieceCell(x,(p.x+c)*C,(p.y+r)*C,p,v==2));
   }
