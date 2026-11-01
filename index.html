@@ -225,7 +225,7 @@ function drawFx(){
   for(let i=fx.length-1;i>=0;i--){
     const f=fx[i],a=(now-f.t)/f.d;
     if(a>=1){fx.splice(i,1);continue}
-    if(f.k==='band'){x.fillStyle=f.color.replace(')',','+(.8*(1-a))+')');if(f.color.startsWith('rgba'))x.fillStyle=f.color.replace(/,[^,]+\)$/ ,','+(.8*(1-a))+')');x.fillRect(0,f.y,W*C,C)}
+    if(f.k==='band'){x.fillStyle=f.color.startsWith('rgba')?f.color.replace(/,[^,]+\)$/ ,','+(.8*(1-a))+')'):f.color;x.fillRect(0,f.y,W*C,C)}
     else if(f.k==='blob'){const r=f.r*(.4+Math.min(1,a*4)*.9);x.globalAlpha=1-a*a;dot(x,f.x,f.y,r,f.color||'#1b1030');dot(x,f.x-r*.3,f.y-r*.3,r*.25,f.glint||'#6a5a9a');x.globalAlpha=1}
     else{const s=(now-f.t)/1000;x.globalAlpha=1-a;dot(x,f.x+f.vx*s,f.y+f.vy*s+400*s*s,f.r,f.color||'#1b1030');x.globalAlpha=1}
   }
@@ -246,7 +246,8 @@ function draw(){
     each(p.m,(r,c,v)=>pieceCell(x,(p.x+c)*C,(p.y+r)*C,p,v==2));
   }
   drawFx();nx.clearRect(0,0,80,60);
-  if(nxt){const ox=(4-nxt.m[0].length)*C/2,oy=(3-nxt.m.length)*C/2;each(nxt.m,(r,c,v)=>cell(nx,ox+c*C,oy+r*C,nxt.c,v==2))}
+  const preview=pendingSpecials.length?{m:[[1]],c:pendingSpecials[0]==='rainbow'?1:7,special:pendingSpecials[0]}:nxt;
+  if(preview){const ox=(4-preview.m[0].length)*C/2,oy=(3-preview.m.length)*C/2;each(preview.m,(r,c,v)=>pieceCell(nx,ox+c*C,oy+r*C,preview,v==2))}
 }
 function loop(t){
   requestAnimationFrame(loop);
