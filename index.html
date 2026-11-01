@@ -281,7 +281,7 @@ function loop(t){
   if(state==='play'){
     if(mirrorActive&&t>=mirrorEnds)finishMirrorRoom();
     acc+=t-last;
-    const base=Math.max(90,800-(level-1)*70),pieceSpeed=p?.special==='slow'?2.4:p?.special==='levelup'?0.5:1,sp=base*(t<slowUntil?2.4:1)*pieceSpeed*(mirrorActive?0.5:1);
+    const base=Math.max(90,800-(level-1)*70),pieceSpeed=p?.special==='slow'?3:p?.special==='levelup'?0.5:1,sp=base*(t<slowUntil?2.4:1)*pieceSpeed*(mirrorActive?0.5:1);
     if(acc>=sp){acc=0;down(false)}
   }
   last=t;draw();
