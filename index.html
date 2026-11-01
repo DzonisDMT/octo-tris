@@ -24,6 +24,7 @@ canvas{display:block;width:100%;border:2px solid var(--ink)}
 #b.shake{animation:shake .3s}
 @keyframes bob{50%{transform:translateY(-4px) rotate(-3deg)}}
 #msg{height:10px;color:var(--btn);font-size:8px}
+#powerups{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:3px}#powerups button{font:5px 'Press Start 2P',monospace;padding:5px 2px;border:1px solid #596b2d;border-radius:3px;background:#d5e89a;color:#1d3a1d;line-height:1.5}#powerups button:disabled{opacity:.35}#powerups button.ready{background:#7a2e45;color:#fff}#powerStatus{font-size:5px;line-height:1.5;min-height:12px;color:#1d3a1d}
 .ov{position:absolute;inset:0;background:rgba(155,188,58,.93);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;font-size:10px;line-height:1.7;padding:10px}
 .ov.hide{display:none}
 .ov h1{font-size:16px;margin:0;color:var(--btn)}
@@ -65,7 +66,7 @@ canvas{display:block;width:100%;border:2px solid var(--ink)}
       <div>LINES<b id="ln">0</b></div>
       <div>LEVEL<b id="lv">1</b></div>
       <div>NEXT<canvas id="n" width="80" height="60" style="margin-top:3px"></canvas></div>
-      <div id="msg"></div>
+      <div id="msg"></div><div id="powerups"><button id="pwBomb" disabled>💣 BOMB 0</button><button id="pwLightning" disabled>⚡ BOLT 0</button><button id="pwRainbow" disabled>🌈 RAINBOW 0</button><button id="pwSlow" disabled>⏱ SLOW 0</button><button id="pwTentacle" disabled>🐙 TENTACLE 0</button></div><div id="powerStatus"></div>
     </div>
     <div class="ov" id="ov"></div>
   </div></div>
@@ -93,6 +94,7 @@ cv.width=W*C;cv.height=H*C;
 const COL=['#e8601c','#f58a3c','#c93f2a','#ffb36b','#7a2e5a','#2b5a8a','#f0d36a'];
 const SH=[[[1,1,1,1]],[[1,1],[1,1]],[[0,1,0],[1,1,1]],[[0,1,1],[1,1,0]],[[1,1,0],[0,1,1]],[[1,0,0],[1,1,1]],[[0,0,1],[1,1,1]]];
 let bd,p,nxt,score,lines,level,state='title',acc=0,last=0,bag=[],best=0;
+const powerups={bomb:0,lightning:0,rainbow:0,slow:0,tentacle:0};let slowUntil=0;
 let nickname='Player',gamesPlayed=0,leaderPeriod='daily',lastScoreSubmitted=0,playerId=null,octavioId=null,previewId='';
 const SUPABASE_URL='https://tverxdvmxclhunvmojaf.supabase.co';
 const SUPABASE_ANON_KEY='sb_publishable__pDaXKlhJ9tH74hY_o96GQ_N8oS2B_Z';
@@ -146,7 +148,7 @@ function lock(){sfx('lock');
   let n=0;
   for(let j=H-1;j>=0;j--)if(bd[j].every(v=>v)){splat(j);bd.splice(j,1);bd.unshift(Array(W).fill(0));n++;j++}
   if(n){
-    sfx('clear',n);shake(n);score+=[0,100,300,500,800][n]*level;lines+=n;const ol=level;level=1+(lines/10|0);if(level>ol){setTimeout(()=>sfx('level'),450);mascot()}
+    const oldLines=lines;sfx('clear',n);shake(n);score+=[0,100,300,500,800][n]*level;lines+=n;awardPowerups(oldLines,lines);const ol=level;level=1+(lines/10|0);if(level>ol){setTimeout(()=>sfx('level'),450);mascot()}
     $('msg').textContent=['','INK!','DOUBLE INK!','TRIPLE INK!','OCTO-INK!!'][n];
     setTimeout(()=>$('msg').textContent='',900);
   }
@@ -158,7 +160,7 @@ async function start(){
   try{await ensurePlayer(nickname)}catch(e){show('<h1>REGISTRATION ERROR</h1><div>'+escapeHtml(e.message)+'</div><div>PLEASE TRY AGAIN</div>');return}
   gamesPlayed++;try{localStorage.setItem('octo-games',gamesPlayed)}catch(e){}
   bd=Array.from({length:H},()=>Array(W).fill(0));
-  score=0;lines=0;level=1;nxt=null;acc=0;hud();
+  score=0;lines=0;level=1;nxt=null;acc=0;Object.keys(powerups).forEach(k=>powerups[k]=0);slowUntil=0;powerStatus('');updatePowerups();hud();
   spawn();state='play';ov.classList.add('hide');sfx('start');mascot();
 }
 function end(){
@@ -230,7 +232,7 @@ function loop(t){
   requestAnimationFrame(loop);
   if(state==='play'){
     acc+=t-last;
-    const sp=Math.max(90,800-(level-1)*70);
+    const sp=Math.max(90,800-(level-1)*70)*(t<slowUntil?2.4:1);
     if(acc>=sp){acc=0;down(false)}
   }
   last=t;draw();
@@ -241,6 +243,7 @@ function hold(el,k,rep){
   el.addEventListener('pointerdown',e=>{e.preventDefault();try{el.setPointerCapture(e.pointerId)}catch(_){}if(navigator.vibrate)navigator.vibrate(8);el.classList.add('on');act(k);if(rep){to=setTimeout(()=>{iv=setInterval(()=>act(k),55)},160)}});
   ['pointerup','pointercancel','pointerleave'].forEach(ev=>el.addEventListener(ev,stop));
 }
+['Bomb','Lightning','Rainbow','Slow','Tentacle'].forEach(k=>{$('pw'+k).onclick=()=>usePower(k.toLowerCase())});
 hold($('bL'),'L',1);hold($('bR'),'R',1);hold($('bD'),'D',1);
 hold($('bU'),'U');hold($('bA'),'A');hold($('bB'),'Z');hold($('bP'),'P');
 $('mu').onclick=()=>{mute=!mute;$('mu').textContent=mute?'SND OFF':'SND ON'};
@@ -258,6 +261,12 @@ async function ensurePlayer(name){if(playerId&&octavioId){await updatePlayerNick
 async function updatePlayerNickname(name){if(!playerId||!octavioId)return;await sb('rpc/octotris_update_nickname',{method:'POST',body:JSON.stringify({p_player_id:playerId,p_octavio_id:octavioId,p_nickname:name})});try{localStorage.setItem('octo-nickname',name)}catch(e){}}
 function renderProfile(){const el=$('lbProfile');if(!playerId||!octavioId){el.innerHTML='PLAYER PROFILE<br>Play your first game to create your permanent Octavio ID.';return}el.innerHTML='MY PLAYER PROFILE<br>'+escapeHtml(nickname)+'<br>OCTAVIO ID<br><strong>'+escapeHtml(octavioId)+'</strong><br><button id="copyOctoId">COPY ID</button><br><small>Keep your Octavio ID safe. You may need it to claim prizes.</small>';$('copyOctoId').onclick=async()=>{try{await navigator.clipboard.writeText(octavioId);$('copyOctoId').textContent='COPIED!'}catch(e){$('lbStatus').textContent='Copy unavailable. Select and copy your ID above.'}}}
 
+function powerStatus(t){$('powerStatus').textContent=t}
+function updatePowerups(){const labels={bomb:'💣 BOMB ',lightning:'⚡ BOLT ',rainbow:'🌈 RAINBOW ',slow:'⏱ SLOW ',tentacle:'🐙 TENTACLE '};Object.keys(powerups).forEach(k=>{const b=$('pw'+k[0].toUpperCase()+k.slice(1));if(!b)return;b.textContent=labels[k]+powerups[k];b.disabled=powerups[k]<=0||state!=='play';b.classList.toggle('ready',powerups[k]>0&&state==='play')})}
+function awardPowerups(before,after){const milestones={slow:5,tentacle:8,bomb:10,lightning:15,rainbow:20};const names={slow:'SLOW MOTION',tentacle:'OCTAVIO TENTACLE',bomb:'EXPLOSIVE BRICK',lightning:'LIGHTNING STRIKE',rainbow:'RAINBOW BRICK'};for(const [k,step] of Object.entries(milestones)){for(let m=Math.floor(before/step);m<Math.floor(after/step);m++){if(powerups[k]<3)powerups[k]++;powerStatus('POWER-UP EARNED: '+names[k]+'!')}}updatePowerups()}
+function compactColumns(){for(let c=0;c<W;c++){const vals=[];for(let r=H-1;r>=0;r--)if(bd[r][c])vals.push(bd[r][c]);for(let r=H-1;r>=0;r--)bd[r][c]=vals[H-1-r]||0}}
+function clearPowerCells(cells){let removed=0;for(const [r,c] of cells){if(r>=0&&r<H&&c>=0&&c<W&&bd[r][c]){bd[r][c]=0;removed++}}if(removed){compactColumns();score+=removed*25;hud();sfx('clear',1);powerStatus('POWER-UP! '+removed+' BRICKS CLEARED')}else powerStatus('NO BRICKS IN RANGE')}
+function usePower(k){if(state!=='play'||!powerups[k])return;powerups[k]--;updatePowerups();const cx=Math.max(0,Math.min(W-1,p.x+Math.floor(p.m[0].length/2))),cy=Math.max(0,Math.min(H-1,p.y+Math.floor(p.m.length/2)));if(k==='slow'){slowUntil=performance.now()+5000;powerStatus('SLOW MOTION: 5 SECONDS!');tone(660,.2,'sine',.1,0,330)}else if(k==='bomb'){const a=[];for(let r=cy-1;r<=cy+1;r++)for(let c=cx-1;c<=cx+1;c++)a.push([r,c]);clearPowerCells(a)}else if(k==='lightning'){const a=[];for(let r=0;r<H;r++)a.push([r,cx]);clearPowerCells(a)}else if(k==='rainbow'){const color=p.c;const a=[];for(let r=0;r<H;r++)for(let c=0;c<W;c++)if(bd[r][c]&&bd[r][c].c===color)a.push([r,c]);clearPowerCells(a)}else if(k==='tentacle'){let target=-1;for(let r=0;r<H;r++)if(bd[r][cx]){target=r;break}if(target<0){for(let c=0;c<W;c++)for(let r=0;r<H;r++)if(bd[r][c]&&(target<0||r<target))target=r}if(target>=0){let col=cx;while(col<W&&!bd[target][col])col++;if(col>=W){col=0;while(col<W&&!bd[target][col])col++}clearPowerCells([[target,col]])}else powerStatus('NO BRICK FOR TENTACLE')}updatePowerups()}
 function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function saveNickname(){
   const v=$('nickname').value.trim().replace(/[^a-zA-Z0-9 _-]/g,'').slice(0,16);
