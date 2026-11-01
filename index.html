@@ -288,7 +288,7 @@ $('saveNick').onclick=()=>{saveNickname();loadLeaderboard(leaderPeriod)};
 $('tabDaily').onclick=()=>loadLeaderboard('daily');
 $('tabWeekly').onclick=()=>loadLeaderboard('weekly');
 $('tabAll').onclick=()=>loadLeaderboard('all');
-$('shareScore').onclick=()=>{const text='I scored '+(score||best)+' in OCTO-TRIS! Can you beat me?';window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(text),'_blank','noopener')};
+$('shareScore').onclick=()=>{const text='I scored '+(score||best)+' in OCTO-TRIS! Can you beat me? 🐙\n\nPlay OCTO-TRIS: https://octo-tris.vercel.app\nFollow @minimaoctavio';window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(text),'_blank','noopener')};
 
 mascot();show('<h1>OCTO-TRIS</h1><div>STACK THE ARMS<br>CLEAR THE INK</div><div>PRESS A</div>');
 requestAnimationFrame(loop);
