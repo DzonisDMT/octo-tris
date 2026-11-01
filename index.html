@@ -79,8 +79,8 @@ canvas{display:block;width:100%;border:2px solid var(--ink)}
     </div>
     <div class="ab"><button id="bB">B</button><button id="bA">A</button></div>
   </div>
-  <div class="hint"><button id="bP">PAUSE</button><br>A TURN &middot; B TURN BACK &middot; &#9650; DROP<br><button id="lbBtn">LEADERBOARD / PLAYER</button></div>
-</div><div class="version">OCTO-TRIS v0.6.0</div>
+  <div class="hint"><button id="bP">PAUSE</button><br>A TURN &middot; B TURN BACK &middot; &#9650; DROP<br><button id="lbBtn">LEADERBOARD / PLAYER</button></div><div class="version">OCTO-TRIS v0.6.0</div>
+</div>
 <div id="lbModal"><div class="lbPanel"><button class="lbClose" id="lbClose">CLOSE</button><h2>OCTO-TRIS LEADERBOARD</h2>
 <label for="nickname">PLAYER NICKNAME</label><input id="nickname" maxlength="16" autocomplete="nickname" placeholder="Your nickname">
 <div class="lbActions"><button id="saveNick">SAVE NAME</button><button id="tabDaily" class="active">DAILY</button><button id="tabWeekly">WEEKLY</button><button id="tabAll">ALL TIME</button></div>
@@ -180,6 +180,7 @@ async function start(){
   spawn();state='play';ov.classList.add('hide');sfx('start');mascot();
 }
 function end(){
+  if(mirrorActive)finishMirrorRoom();
   state='over';sfx('over');
   if(score>best){best=score;try{localStorage.setItem('octo-best',best)}catch(e){}}
   submitScore(score);
@@ -218,7 +219,7 @@ function goldenCell(g,px,py,alpha=1){
   g.fillStyle='rgba(255,255,255,.75)';g.beginPath();g.moveTo(px+5,py+5);g.lineTo(px+11,py+3);g.lineTo(px+17,py+10);g.lineTo(px+10,py+8);g.closePath();g.fill();
   dot(g,px+6,py+15,1.5,'#fff');dot(g,px+15,py+6,1.3,'#fff');g.restore();
 }
-function pieceCell(g,px,py,piece,eye){if(piece.special==='golden')goldenCell(g,px,py);else if(piece.special){const colors={bomb:['#ff5b35','#ffe0a0'],tentacle:['#8d42b5','#f1c9ff'],slow:['#3c9bd8','#d5f4ff'],lightning:['#f5d52e','#fff9b5'],rainbow:['#ed69b5','#fff0fb']};const pair=colors[piece.special]||['#fff','#fff'];g.save();g.shadowColor=pair[0];g.shadowBlur=9;g.fillStyle=pair[0];g.beginPath();g.roundRect?g.roundRect(px+1,py+1,C-2,C-2,6):g.rect(px+1,py+1,C-2,C-2);g.fill();g.shadowBlur=0;g.strokeStyle=pair[1];g.lineWidth=2;g.stroke();dot(g,px+10,py+10,5,pair[1]);g.fillStyle='#242018';g.font='bold 9px sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(({bomb:'B',tentacle:'T',slow:'S',lightning:'L',rainbow:'R'})[piece.special],px+10,py+11);g.restore()}else cell(g,px,py,piece.c,eye)}
+function pieceCell(g,px,py,piece,eye){if(mirrorActive){cell(g,px,py,piece.c,eye);return}if(piece.special==='golden')goldenCell(g,px,py);else if(piece.special){const colors={bomb:['#ff5b35','#ffe0a0'],tentacle:['#8d42b5','#f1c9ff'],slow:['#3c9bd8','#d5f4ff'],lightning:['#f5d52e','#fff9b5'],rainbow:['#ed69b5','#fff0fb']};const pair=colors[piece.special]||['#fff','#fff'];g.save();g.shadowColor=pair[0];g.shadowBlur=9;g.fillStyle=pair[0];g.beginPath();g.roundRect?g.roundRect(px+1,py+1,C-2,C-2,6):g.rect(px+1,py+1,C-2,C-2);g.fill();g.shadowBlur=0;g.strokeStyle=pair[1];g.lineWidth=2;g.stroke();dot(g,px+10,py+10,5,pair[1]);g.fillStyle='#242018';g.font='bold 9px sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(({bomb:'B',tentacle:'T',slow:'S',lightning:'L',rainbow:'R'})[piece.special],px+10,py+11);g.restore()}else cell(g,px,py,piece.c,eye)}
 const fx=[];
 function splat(j,style){
   const cy=j*C+C/2,t=performance.now(),gold=style==='gold',color=gold?'#ffc928':'#1b1030',glint=gold?'#fff2a0':'#6a5a9a';
@@ -263,7 +264,7 @@ function loop(t){
   if(state==='play'){
     if(mirrorActive&&t>=mirrorEnds)finishMirrorRoom();
     acc+=t-last;
-    const base=Math.max(90,800-(level-1)*70),sp=base*(t<slowUntil?2.4:1)*(mirrorActive?.5:1);
+    const base=Math.max(90,800-(level-1)*70),sp=base*(t<slowUntil?2.4:1)*(mirrorActive?0.5:1);
     if(acc>=sp){acc=0;down(false)}
   }
   last=t;draw();
