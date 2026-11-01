@@ -24,7 +24,7 @@ canvas{display:block;width:100%;border:2px solid var(--ink)}
 #b.shake{animation:shake .3s}
 @keyframes bob{50%{transform:translateY(-4px) rotate(-3deg)}}
 #msg{height:10px;color:var(--btn);font-size:8px}
-#powerups{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:3px}#powerups button{font:5px 'Press Start 2P',monospace;padding:5px 2px;border:1px solid #596b2d;border-radius:3px;background:#d5e89a;color:#1d3a1d;line-height:1.5}#powerups button:disabled{opacity:.35}#powerups button.ready{background:#7a2e45;color:#fff}#powerStatus{font-size:5px;line-height:1.5;min-height:12px;color:#1d3a1d}
+#powerStatus{font-size:5px;line-height:1.6;min-height:22px;color:#1d3a1d;margin-top:4px}
 .ov{position:absolute;inset:0;background:rgba(155,188,58,.93);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;font-size:10px;line-height:1.7;padding:10px}
 .ov.hide{display:none}
 .ov h1{font-size:16px;margin:0;color:var(--btn)}
@@ -66,7 +66,7 @@ canvas{display:block;width:100%;border:2px solid var(--ink)}
       <div>LINES<b id="ln">0</b></div>
       <div>LEVEL<b id="lv">1</b></div>
       <div>NEXT<canvas id="n" width="80" height="60" style="margin-top:3px"></canvas></div>
-      <div id="msg"></div><div id="powerups"><button id="pwBomb" disabled>💣 BOMB 0</button><button id="pwLightning" disabled>⚡ BOLT 0</button><button id="pwRainbow" disabled>🌈 RAINBOW 0</button><button id="pwSlow" disabled>⏱ SLOW 0</button><button id="pwTentacle" disabled>🐙 TENTACLE 0</button></div><div id="powerStatus"></div>
+      <div id="msg"></div><div id="powerStatus">CLEAR ROWS TO RELEASE SPECIAL BRICKS!</div>
     </div>
     <div class="ov" id="ov"></div>
   </div></div>
@@ -93,8 +93,8 @@ const cv=$('b'),x=cv.getContext('2d'),nx=$('n').getContext('2d'),ov=$('ov');
 cv.width=W*C;cv.height=H*C;
 const COL=['#e8601c','#f58a3c','#c93f2a','#ffb36b','#7a2e5a','#2b5a8a','#f0d36a'];
 const SH=[[[1,1,1,1]],[[1,1],[1,1]],[[0,1,0],[1,1,1]],[[0,1,1],[1,1,0]],[[1,1,0],[0,1,1]],[[1,0,0],[1,1,1]],[[0,0,1],[1,1,1]]];
-let bd,p,nxt,score,lines,level,state='title',acc=0,last=0,bag=[],best=0,goldenBrickPending=false,goldenBrickUsed=false;
-const powerups={bomb:0,lightning:0,rainbow:0,slow:0,tentacle:0};let slowUntil=0;
+let bd,p,nxt,score,lines,level,state='title',acc=0,last=0,bag=[],best=0,goldenBrickUsed=false;
+const powerups={};let slowUntil=0,pendingSpecials=[];
 let nickname='Player',gamesPlayed=0,leaderPeriod='daily',lastScoreSubmitted=0,playerId=null,octavioId=null,previewId='';
 const SUPABASE_URL='https://tverxdvmxclhunvmojaf.supabase.co';
 const SUPABASE_ANON_KEY='sb_publishable__pDaXKlhJ9tH74hY_o96GQ_N8oS2B_Z';
@@ -139,25 +139,25 @@ function rnd(){
 const hit=(m,px,py)=>{let h=false;each(m,(r,c)=>{const a=px+c,b=py+r;if(a<0||a>=W||b>=H||(b>=0&&bd[b][a]))h=true});return h};
 const rot=m=>m[0].map((_,i)=>m.map(r=>r[i]).reverse());
 function spawn(){
-  if(goldenBrickPending){p={m:[[1]],c:7,special:'golden'};goldenBrickPending=false;powerStatus('GOLDEN BRICK! MOVE IT TO CHOOSE A ROW');tone(880,.22,'sine',.12,0,1320)}
+  if(pendingSpecials.length){const special=pendingSpecials.shift();p={m:[[1]],c:special==='rainbow'?1+Math.floor(Math.random()*7):7,special};powerStatus(special.toUpperCase()+' BRICK INCOMING!');tone(740,.16,'sine',.1,0,1100)}
   else{p=nxt||rnd();nxt=rnd()}
   p.x=(W-p.m[0].length)>>1;p.y=0;
   if(hit(p.m,p.x,p.y))end();
 }
 function lock(){sfx('lock');
   let n=0;
-  if(p.special==='golden'){
-    const row=Math.max(0,Math.min(H-1,p.y));
-    splat(row);bd.splice(row,1);bd.unshift(Array(W).fill(0));n=1;
-    powerStatus('GOLDEN BRICK! ROW '+(row+1)+' DESTROYED!');
-    tone(1046,.24,'sine',.14,0,1568);
+  if(p.special){
+    const row=Math.max(0,Math.min(H-1,p.y)),col=Math.max(0,Math.min(W-1,p.x));
+    if(p.special==='golden'){
+      splat(row,'gold');bd.splice(row,1);bd.unshift(Array(W).fill(0));n=1;
+      powerStatus('GOLDEN BRICK! ROW '+(row+1)+' DESTROYED!');tone(1046,.24,'sine',.14,0,1568);
+    }else activateFallingPower(p.special,row,col,p.c);
   }else{
     each(p.m,(r,c,v)=>{if(p.y+r>=0)bd[p.y+r][p.x+c]={c:p.c,e:v==2}});
     for(let j=H-1;j>=0;j--)if(bd[j].every(v=>v)){splat(j);bd.splice(j,1);bd.unshift(Array(W).fill(0));n++;j++}
   }
   if(n){
     const oldLines=lines;sfx('clear',n);shake(n);score+=[0,100,300,500,800][n]*level;lines+=n;awardPowerups(oldLines,lines);
-    if(oldLines<2&&lines>=2&&!goldenBrickUsed){goldenBrickUsed=true;goldenBrickPending=true;powerStatus('GOLDEN BRICK EARNED! NEXT PIECE: MOVE TO CHOOSE A ROW!')}
     const ol=level;level=1+(lines/10|0);if(level>ol){setTimeout(()=>sfx('level'),450);mascot()}
     $('msg').textContent=p.special==='golden'?'GOLDEN ROW!':['','INK!','DOUBLE INK!','TRIPLE INK!','OCTO-INK!!'][n];
     setTimeout(()=>$('msg').textContent='',900);
@@ -170,7 +170,7 @@ async function start(){
   try{await ensurePlayer(nickname)}catch(e){show('<h1>REGISTRATION ERROR</h1><div>'+escapeHtml(e.message)+'</div><div>PLEASE TRY AGAIN</div>');return}
   gamesPlayed++;try{localStorage.setItem('octo-games',gamesPlayed)}catch(e){}
   bd=Array.from({length:H},()=>Array(W).fill(0));
-  score=0;lines=0;level=1;nxt=null;acc=0;goldenBrickPending=false;goldenBrickUsed=false;Object.keys(powerups).forEach(k=>powerups[k]=0);slowUntil=0;powerStatus('');updatePowerups();hud();
+  score=0;lines=0;level=1;nxt=null;acc=0;pendingSpecials=[];goldenBrickUsed=false;slowUntil=0;powerStatus('CLEAR ROWS TO RELEASE SPECIAL BRICKS!');hud();
   spawn();state='play';ov.classList.add('hide');sfx('start');mascot();
 }
 function end(){
@@ -209,14 +209,14 @@ function goldenCell(g,px,py,alpha=1){
   g.fillStyle='rgba(255,255,255,.75)';g.beginPath();g.moveTo(px+5,py+5);g.lineTo(px+11,py+3);g.lineTo(px+17,py+10);g.lineTo(px+10,py+8);g.closePath();g.fill();
   dot(g,px+6,py+15,1.5,'#fff');dot(g,px+15,py+6,1.3,'#fff');g.restore();
 }
-function pieceCell(g,px,py,piece,eye){if(piece.special==='golden')goldenCell(g,px,py);else cell(g,px,py,piece.c,eye)}
+function pieceCell(g,px,py,piece,eye){if(piece.special==='golden')goldenCell(g,px,py);else if(piece.special){const colors={bomb:['#ff5b35','#ffe0a0'],tentacle:['#8d42b5','#f1c9ff'],slow:['#3c9bd8','#d5f4ff'],lightning:['#f5d52e','#fff9b5'],rainbow:['#ed69b5','#fff0fb']};const pair=colors[piece.special]||['#fff','#fff'];g.save();g.shadowColor=pair[0];g.shadowBlur=9;g.fillStyle=pair[0];g.beginPath();g.roundRect?g.roundRect(px+1,py+1,C-2,C-2,6):g.rect(px+1,py+1,C-2,C-2);g.fill();g.shadowBlur=0;g.strokeStyle=pair[1];g.lineWidth=2;g.stroke();dot(g,px+10,py+10,5,pair[1]);g.fillStyle='#242018';g.font='bold 9px sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(({bomb:'B',tentacle:'T',slow:'S',lightning:'L',rainbow:'R'})[piece.special],px+10,py+11);g.restore()}else cell(g,px,py,piece.c,eye)}
 const fx=[];
-function splat(j){
-  const cy=j*C+C/2,t=performance.now();
-  fx.push({k:'band',y:j*C,t,d:350});
+function splat(j,style){
+  const cy=j*C+C/2,t=performance.now(),gold=style==='gold',color=gold?'#ffc928':'#1b1030',glint=gold?'#fff2a0':'#6a5a9a';
+  fx.push({k:'band',y:j*C,t,d:gold?520:350,color:gold?'rgba(255,214,55,.95)':'rgba(255,255,255,.8)'});
   for(let i=0;i<W;i++){
-    fx.push({k:'blob',x:(i+.5)*C,y:cy,r:8+Math.random()*8,t,d:650});
-    for(let q=0;q<2;q++)fx.push({k:'drop',x:(i+.5)*C,y:cy,vx:(Math.random()-.5)*160,vy:-60-Math.random()*140,r:2+Math.random()*3,t,d:700+Math.random()*300});
+    fx.push({k:'blob',x:(i+.5)*C,y:cy,r:8+Math.random()*8,t,d:650,color,glint});
+    for(let q=0;q<2;q++)fx.push({k:'drop',x:(i+.5)*C,y:cy,vx:(Math.random()-.5)*160,vy:-60-Math.random()*140,r:2+Math.random()*3,t,d:700+Math.random()*300,color});
   }
 }
 function drawFx(){
@@ -224,9 +224,9 @@ function drawFx(){
   for(let i=fx.length-1;i>=0;i--){
     const f=fx[i],a=(now-f.t)/f.d;
     if(a>=1){fx.splice(i,1);continue}
-    if(f.k==='band'){x.fillStyle='rgba(255,255,255,'+(.8*(1-a))+')';x.fillRect(0,f.y,W*C,C)}
-    else if(f.k==='blob'){const r=f.r*(.4+Math.min(1,a*4)*.9);x.globalAlpha=1-a*a;dot(x,f.x,f.y,r,'#1b1030');dot(x,f.x-r*.3,f.y-r*.3,r*.25,'#6a5a9a');x.globalAlpha=1}
-    else{const s=(now-f.t)/1000;x.globalAlpha=1-a;dot(x,f.x+f.vx*s,f.y+f.vy*s+400*s*s,f.r,'#1b1030');x.globalAlpha=1}
+    if(f.k==='band'){x.fillStyle=f.color.replace(')',','+(.8*(1-a))+')');if(f.color.startsWith('rgba'))x.fillStyle=f.color.replace(/,[^,]+\)$/ ,','+(.8*(1-a))+')');x.fillRect(0,f.y,W*C,C)}
+    else if(f.k==='blob'){const r=f.r*(.4+Math.min(1,a*4)*.9);x.globalAlpha=1-a*a;dot(x,f.x,f.y,r,f.color||'#1b1030');dot(x,f.x-r*.3,f.y-r*.3,r*.25,f.glint||'#6a5a9a');x.globalAlpha=1}
+    else{const s=(now-f.t)/1000;x.globalAlpha=1-a;dot(x,f.x+f.vx*s,f.y+f.vy*s+400*s*s,f.r,f.color||'#1b1030');x.globalAlpha=1}
   }
 }
 function shake(n){if(n<2)return;cv.classList.remove('shake');void cv.offsetWidth;cv.classList.add('shake')}
@@ -262,7 +262,7 @@ function hold(el,k,rep){
   el.addEventListener('pointerdown',e=>{e.preventDefault();try{el.setPointerCapture(e.pointerId)}catch(_){}if(navigator.vibrate)navigator.vibrate(8);el.classList.add('on');act(k);if(rep){to=setTimeout(()=>{iv=setInterval(()=>act(k),55)},160)}});
   ['pointerup','pointercancel','pointerleave'].forEach(ev=>el.addEventListener(ev,stop));
 }
-['Bomb','Lightning','Rainbow','Slow','Tentacle'].forEach(k=>{$('pw'+k).onclick=()=>usePower(k.toLowerCase())});
+
 hold($('bL'),'L',1);hold($('bR'),'R',1);hold($('bD'),'D',1);
 hold($('bU'),'U');hold($('bA'),'A');hold($('bB'),'Z');hold($('bP'),'P');
 $('mu').onclick=()=>{mute=!mute;$('mu').textContent=mute?'SND OFF':'SND ON'};
@@ -281,11 +281,16 @@ async function updatePlayerNickname(name){if(!playerId||!octavioId)return;await 
 function renderProfile(){const el=$('lbProfile');if(!playerId||!octavioId){el.innerHTML='PLAYER PROFILE<br>Play your first game to create your permanent Octavio ID.';return}el.innerHTML='MY PLAYER PROFILE<br>'+escapeHtml(nickname)+'<br>OCTAVIO ID<br><strong>'+escapeHtml(octavioId)+'</strong><br><button id="copyOctoId">COPY ID</button><br><small>Keep your Octavio ID safe. You may need it to claim prizes.</small>';$('copyOctoId').onclick=async()=>{try{await navigator.clipboard.writeText(octavioId);$('copyOctoId').textContent='COPIED!'}catch(e){$('lbStatus').textContent='Copy unavailable. Select and copy your ID above.'}}}
 
 function powerStatus(t){$('powerStatus').textContent=t}
-function updatePowerups(){const labels={bomb:'💣 BOMB ',lightning:'⚡ BOLT ',rainbow:'🌈 RAINBOW ',slow:'⏱ SLOW ',tentacle:'🐙 TENTACLE '};Object.keys(powerups).forEach(k=>{const b=$('pw'+k[0].toUpperCase()+k.slice(1));if(!b)return;b.textContent=labels[k]+powerups[k];b.disabled=powerups[k]<=0||state!=='play';b.classList.toggle('ready',powerups[k]>0&&state==='play')})}
-function awardPowerups(before,after){const cycle=20;const rewards=[{at:5,key:'slow',name:'SLOW MOTION'},{at:8,key:'tentacle',name:'OCTAVIO TENTACLE'},{at:10,key:'bomb',name:'EXPLOSIVE BRICK'},{at:15,key:'lightning',name:'LIGHTNING STRIKE'},{at:20,key:'rainbow',name:'RAINBOW BRICK'}];for(let base=Math.floor(before/cycle)*cycle;base<=after;base+=cycle){for(const reward of rewards){const milestone=base+reward.at;if(milestone>before&&milestone<=after){if(powerups[reward.key]<3){powerups[reward.key]++;powerStatus('POWER-UP EARNED: '+reward.name+'!')}else{powerStatus(reward.name+' REWARD FULL (3/3)')}}}}updatePowerups()}
+function awardPowerups(before,after){const cycle=20,rewards=[{at:5,key:'slow'},{at:8,key:'tentacle'},{at:10,key:'bomb'},{at:15,key:'lightning'},{at:20,key:'rainbow'}];for(let base=Math.floor(before/cycle)*cycle;base<=after;base+=cycle){for(const reward of rewards){const milestone=base+reward.at;if(milestone>before&&milestone<=after){pendingSpecials.push(reward.key);powerStatus(reward.key.toUpperCase()+' BRICK UNLOCKED! NEXT PIECE!')}}}}
 function compactColumns(){for(let c=0;c<W;c++){const vals=[];for(let r=H-1;r>=0;r--)if(bd[r][c])vals.push(bd[r][c]);for(let r=H-1;r>=0;r--)bd[r][c]=vals[H-1-r]||0}}
-function clearPowerCells(cells){let removed=0;for(const [r,c] of cells){if(r>=0&&r<H&&c>=0&&c<W&&bd[r][c]){bd[r][c]=0;removed++}}if(removed){compactColumns();score+=removed*25;hud();sfx('clear',1);powerStatus('POWER-UP! '+removed+' BRICKS CLEARED')}else powerStatus('NO BRICKS IN RANGE')}
-function usePower(k){if(state!=='play'||!powerups[k])return;powerups[k]--;updatePowerups();const cx=Math.max(0,Math.min(W-1,p.x+Math.floor(p.m[0].length/2))),cy=Math.max(0,Math.min(H-1,p.y+Math.floor(p.m.length/2)));if(k==='slow'){slowUntil=performance.now()+5000;powerStatus('SLOW MOTION: 5 SECONDS!');tone(660,.2,'sine',.1,0,330)}else if(k==='bomb'){const a=[];for(let r=cy-1;r<=cy+1;r++)for(let c=cx-1;c<=cx+1;c++)a.push([r,c]);clearPowerCells(a)}else if(k==='lightning'){const a=[];for(let r=0;r<H;r++)a.push([r,cx]);clearPowerCells(a)}else if(k==='rainbow'){const color=p.c;const a=[];for(let r=0;r<H;r++)for(let c=0;c<W;c++)if(bd[r][c]&&bd[r][c].c===color)a.push([r,c]);clearPowerCells(a)}else if(k==='tentacle'){let target=-1;for(let r=0;r<H;r++)if(bd[r][cx]){target=r;break}if(target<0){for(let c=0;c<W;c++)for(let r=0;r<H;r++)if(bd[r][c]&&(target<0||r<target))target=r}if(target>=0){let col=cx;while(col<W&&!bd[target][col])col++;if(col>=W){col=0;while(col<W&&!bd[target][col])col++}clearPowerCells([[target,col]])}else powerStatus('NO BRICK FOR TENTACLE')}updatePowerups()}
+function clearPowerCells(cells,label){let removed=0;for(const [r,c] of cells){if(r>=0&&r<H&&c>=0&&c<W&&bd[r][c]){bd[r][c]=0;removed++}}if(removed){compactColumns();score+=removed*25;hud();sfx('clear',1);powerStatus(label+': '+removed+' BRICKS CLEARED')}else powerStatus(label+': NO BRICKS IN RANGE')}
+function activateFallingPower(kind,row,col,color){
+  if(kind==='slow'){slowUntil=performance.now()+5000;powerStatus('SLOW MOTION! 5 SECONDS');tone(660,.25,'sine',.12,0,330);return}
+  if(kind==='bomb'){const cells=[];for(let r=row-1;r<=row+1;r++)for(let c=col-1;c<=col+1;c++)cells.push([r,c]);clearPowerCells(cells,'BOMB BLAST');return}
+  if(kind==='lightning'){const cells=[];for(let r=0;r<H;r++)cells.push([r,col]);clearPowerCells(cells,'LIGHTNING STRIKE');return}
+  if(kind==='rainbow'){const cells=[];for(let r=0;r<H;r++)for(let c=0;c<W;c++)if(bd[r][c]&&bd[r][c].c===color)cells.push([r,c]);clearPowerCells(cells,'RAINBOW CLEAR');return}
+  if(kind==='tentacle'){let target=-1;for(let r=row;r>=0;r--)if(bd[r][col]){target=r;break}if(target<0)for(let r=row+1;r<H;r++)if(bd[r][col]){target=r;break}if(target<0){for(let c=0;c<W;c++)for(let r=0;r<H;r++)if(bd[r][c]&&(target<0||Math.abs(r-row)<Math.abs(target-row)))target=r}if(target>=0){let c=col;while(c<W&&!bd[target][c])c++;if(c>=W){c=0;while(c<W&&!bd[target][c])c++}clearPowerCells([[target,c]],'OCTAVIO TENTACLE')}else powerStatus('TENTACLE FOUND NO BRICK');return}
+}
 function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function saveNickname(){
   const v=$('nickname').value.trim().replace(/[^a-zA-Z0-9 _-]/g,'').slice(0,16);
