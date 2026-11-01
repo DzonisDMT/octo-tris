@@ -8,7 +8,8 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:manipulation}
 html,body{height:100%;margin:0}
 body{background:var(--bg);display:flex;align-items:center;justify-content:center;font-family:'Press Start 2P','Courier New',monospace;overflow:hidden}
-.gb{width:min(calc(100vw - 16px),380px);background:var(--body);border-radius:18px 18px 56px 18px;padding:12px 14px 18px;box-shadow:0 6px 0 #8a8268}
+.gb{position:relative;width:min(calc(100vw - 16px),380px);background:var(--body);border-radius:18px 18px 56px 18px;padding:12px 14px 22px;box-shadow:0 6px 0 #8a8268}
+.version{position:absolute;left:10px;bottom:5px;font:5px 'Press Start 2P',monospace;color:#7a7460}
 .top{display:flex;justify-content:space-between;font-size:8px;color:var(--btn);margin-bottom:8px}
 .bezel{background:#4a4838;border-radius:10px;padding:9px}
 .lcd{background:var(--lcd);display:flex;gap:8px;padding:6px;position:relative;color:var(--ink)}
@@ -79,7 +80,7 @@ canvas{display:block;width:100%;border:2px solid var(--ink)}
     <div class="ab"><button id="bB">B</button><button id="bA">A</button></div>
   </div>
   <div class="hint"><button id="bP">PAUSE</button><br>A TURN &middot; B TURN BACK &middot; &#9650; DROP<br><button id="lbBtn">LEADERBOARD / PLAYER</button></div>
-</div>
+</div><div class="version">OCTO-TRIS v0.6.0</div>
 <div id="lbModal"><div class="lbPanel"><button class="lbClose" id="lbClose">CLOSE</button><h2>OCTO-TRIS LEADERBOARD</h2>
 <label for="nickname">PLAYER NICKNAME</label><input id="nickname" maxlength="16" autocomplete="nickname" placeholder="Your nickname">
 <div class="lbActions"><button id="saveNick">SAVE NAME</button><button id="tabDaily" class="active">DAILY</button><button id="tabWeekly">WEEKLY</button><button id="tabAll">ALL TIME</button></div>
@@ -96,6 +97,7 @@ const SH=[[[1,1,1,1]],[[1,1],[1,1]],[[0,1,0],[1,1,1]],[[0,1,1],[1,1,0]],[[1,1,0]
 let bd,p,nxt,score,lines,level,state='title',acc=0,last=0,bag=[],best=0,goldenBrickUsed=false;
 const powerups={};let slowUntil=0,pendingSpecials=[];
 let nickname='Player',gamesPlayed=0,leaderPeriod='daily',lastScoreSubmitted=0,playerId=null,octavioId=null,previewId='';
+let mirrorActive=false,mirrorRoomUsed=false,mirrorEnds=0,mirrorBonus=0;
 const SUPABASE_URL='https://tverxdvmxclhunvmojaf.supabase.co';
 const SUPABASE_ANON_KEY='sb_publishable__pDaXKlhJ9tH74hY_o96GQ_N8oS2B_Z';
 try{nickname=localStorage.getItem('octo-nickname')||'Player';gamesPlayed=+(localStorage.getItem('octo-games')||0);playerId=localStorage.getItem('octo-player-id');octavioId=localStorage.getItem('octo-player-octavio-id');$('nickname').value=nickname}catch(e){}
@@ -144,6 +146,9 @@ function spawn(){
   p.x=(W-p.m[0].length)>>1;p.y=0;
   if(hit(p.m,p.x,p.y))end();
 }
+function startMirrorRoom(){if(mirrorRoomUsed)return;mirrorRoomUsed=true;mirrorActive=true;mirrorEnds=performance.now()+60000;mirrorBonus=0;powerStatus('MIRROR ROOM! 60 SECONDS · CONTROLS REVERSED · 2X SPEED');tone(220,.5,'sawtooth',.1,0,880)}
+function finishMirrorRoom(){if(!mirrorActive)return;mirrorActive=false;score+=mirrorBonus;mirrorEnds=0;powerStatus('MIRROR ROOM COMPLETE! +'+mirrorBonus+' BONUS POINTS');hud();tone(880,.35,'sine',.12,0,440)}
+function moveVertical(d){if(!hit(p.m,p.x,p.y+d)){p.y+=d;if(d>0)score+=1;hud()}else if(d>0)lock()}
 function lock(){sfx('lock');
   let n=0;
   if(p.special){
@@ -157,7 +162,7 @@ function lock(){sfx('lock');
     for(let j=H-1;j>=0;j--)if(bd[j].every(v=>v)){splat(j);bd.splice(j,1);bd.unshift(Array(W).fill(0));n++;j++}
   }
   if(n){
-    const oldLines=lines;sfx('clear',n);shake(n);score+=[0,100,300,500,800][n]*level;lines+=n;awardPowerups(oldLines,lines);
+    const oldLines=lines;sfx('clear',n);shake(n);score+=[0,100,300,500,800][n]*level;lines+=n;awardPowerups(oldLines,lines);if(mirrorActive)mirrorBonus+=250*n;if(!mirrorRoomUsed&&oldLines<11&&lines>=11)startMirrorRoom();
     if(oldLines<2&&lines>=2&&!goldenBrickUsed){goldenBrickUsed=true;pendingSpecials.unshift('golden');powerStatus('GOLDEN BRICK UNLOCKED! NEXT PIECE!')}
     const ol=level;level=1+(lines/10|0);if(level>ol){setTimeout(()=>sfx('level'),450);mascot()}
     $('msg').textContent=p.special==='golden'?'GOLDEN ROW!':['','INK!','DOUBLE INK!','TRIPLE INK!','OCTO-INK!!'][n];
@@ -171,7 +176,7 @@ async function start(){
   try{await ensurePlayer(nickname)}catch(e){show('<h1>REGISTRATION ERROR</h1><div>'+escapeHtml(e.message)+'</div><div>PLEASE TRY AGAIN</div>');return}
   gamesPlayed++;try{localStorage.setItem('octo-games',gamesPlayed)}catch(e){}
   bd=Array.from({length:H},()=>Array(W).fill(0));
-  score=0;lines=0;level=1;nxt=null;acc=0;pendingSpecials=[];goldenBrickUsed=false;slowUntil=0;powerStatus('CLEAR ROWS TO RELEASE SPECIAL BRICKS!');hud();
+  score=0;lines=0;level=1;nxt=null;acc=0;pendingSpecials=[];goldenBrickUsed=false;slowUntil=0;mirrorActive=false;mirrorRoomUsed=false;mirrorEnds=0;mirrorBonus=0;powerStatus('CLEAR ROWS TO RELEASE SPECIAL BRICKS!');hud();
   spawn();state='play';ov.classList.add('hide');sfx('start');mascot();
 }
 function end(){
@@ -194,15 +199,18 @@ function act(k){
   if(state==='title'||state==='over'){if(k==='A'||k==='P')start();return}
   if(k==='P'){pause();return}
   if(state!=='play')return;
+  if(mirrorActive){({L:()=>move(1),R:()=>move(-1),D:()=>moveVertical(-1),U:()=>moveVertical(1),A:()=>turn(true),Z:()=>turn()})[k]?.();return}
   ({L:()=>move(-1),R:()=>move(1),D:()=>down(true),A:()=>turn(),Z:()=>turn(true),U:drop})[k]();
 }
 function cell(g,px,py,c,e){
+  if(mirrorActive){g.save();g.fillStyle='#fff';g.shadowColor='#fff';g.shadowBlur=4;g.beginPath();g.roundRect?g.roundRect(px+1,py+1,C-2,C-2,3):g.rect(px+1,py+1,C-2,C-2);g.fill();g.shadowBlur=0;g.fillStyle='#111';if(e){dot(g,px+6,py+11,3,'#111');dot(g,px+14,py+11,3,'#111')}g.restore();return}
   g.fillStyle=COL[c-1];g.beginPath();
   g.roundRect?g.roundRect(px+1,py+1,C-2,C-2,6):g.rect(px+1,py+1,C-2,C-2);g.fill();
   g.fillStyle='rgba(255,255,255,.4)';g.fillRect(px+4,py+3,5,3);
   if(e){dot(g,px+6,py+11,3.4,'#fff');dot(g,px+14,py+11,3.4,'#fff');dot(g,px+7,py+11.5,1.6,'#111');dot(g,px+15,py+11.5,1.6,'#111')}
 }
 function goldenCell(g,px,py,alpha=1){
+  if(mirrorActive){g.save();g.globalAlpha=alpha;g.fillStyle='#fff';g.shadowColor='#fff';g.shadowBlur=12;g.fillRect(px+1,py+1,C-2,C-2);g.restore();return}
   g.save();g.globalAlpha=alpha;
   const grad=g.createLinearGradient(px,py,px+C,py+C);grad.addColorStop(0,'#fff7b0');grad.addColorStop(.28,'#ffd700');grad.addColorStop(.62,'#ff9f00');grad.addColorStop(1,'#fff1a6');
   g.shadowColor='#fff000';g.shadowBlur=12;g.fillStyle=grad;g.beginPath();g.roundRect?g.roundRect(px+1,py+1,C-2,C-2,6):g.rect(px+1,py+1,C-2,C-2);g.fill();g.shadowBlur=0;
@@ -233,8 +241,8 @@ function drawFx(){
 function shake(n){if(n<2)return;cv.classList.remove('shake');void cv.offsetWidth;cv.classList.add('shake')}
 function dot(g,cx,cy,r,col){g.fillStyle=col;g.beginPath();g.arc(cx,cy,r,0,7);g.fill()}
 function draw(){
-  x.fillStyle='#a3c243';x.fillRect(0,0,cv.width,cv.height);
-  x.strokeStyle='rgba(30,60,30,.1)';x.beginPath();
+  x.fillStyle=mirrorActive?'#050505':'#a3c243';x.fillRect(0,0,cv.width,cv.height);
+  x.strokeStyle=mirrorActive?'rgba(255,255,255,.13)':'rgba(30,60,30,.1)';x.beginPath();
   for(let i=1;i<W;i++){x.moveTo(i*C,0);x.lineTo(i*C,H*C)}
   for(let j=1;j<H;j++){x.moveTo(0,j*C);x.lineTo(W*C,j*C)}
   x.stroke();
@@ -246,14 +254,16 @@ function draw(){
     each(p.m,(r,c,v)=>pieceCell(x,(p.x+c)*C,(p.y+r)*C,p,v==2));
   }
   drawFx();nx.clearRect(0,0,80,60);
+  if(mirrorActive){const left=Math.max(0,Math.ceil((mirrorEnds-performance.now())/1000));powerStatus('MIRROR ROOM '+left+'s · BONUS '+mirrorBonus);$('msg').textContent='MIRROR MODE';$('msg').style.color='#fff'}else{$('msg').style.color='var(--btn)'}
   const preview=pendingSpecials.length?{m:[[1]],c:pendingSpecials[0]==='rainbow'?1:7,special:pendingSpecials[0]}:nxt;
   if(preview){const ox=(4-preview.m[0].length)*C/2,oy=(3-preview.m.length)*C/2;each(preview.m,(r,c,v)=>pieceCell(nx,ox+c*C,oy+r*C,preview,v==2))}
 }
 function loop(t){
   requestAnimationFrame(loop);
   if(state==='play'){
+    if(mirrorActive&&t>=mirrorEnds)finishMirrorRoom();
     acc+=t-last;
-    const sp=Math.max(90,800-(level-1)*70)*(t<slowUntil?2.4:1);
+    const base=Math.max(90,800-(level-1)*70),sp=base*(t<slowUntil?2.4:1)*(mirrorActive?.5:1);
     if(acc>=sp){acc=0;down(false)}
   }
   last=t;draw();
@@ -271,13 +281,13 @@ $('mu').onclick=()=>{mute=!mute;$('mu').textContent=mute?'SND OFF':'SND ON'};
 ov.addEventListener('pointerdown',e=>{if(state==='title'&&e.target.closest('#startName,#startPlay'))return;if(state==='title'||state==='over')act('A');else if(state==='pause')pause()});
 addEventListener('keydown',e=>{
   if(e.key==='Enter'&&e.target&&e.target.id==='startName')return;
-  const m={ArrowLeft:'L',ArrowRight:'R',ArrowDown:'D',ArrowUp:'A',x:'A',' ':'U',p:'P',z:'Z',Enter:'A'}[e.key];
+  const m={ArrowLeft:'L',ArrowRight:'R',ArrowDown:'D',ArrowUp:mirrorActive?'U':'A',x:'A',' ':'U',p:'P',z:'Z',Enter:'A'}[e.key];
   if(m){e.preventDefault();act(m)}
 });
 
 
 function makePreviewId(){const b=new Uint8Array(8);crypto.getRandomValues(b);const s=Array.from(b,x=>x.toString(16).padStart(2,'0')).join('').toUpperCase();return 'OCTO-'+s.slice(0,5)+'-'+s.slice(5,9)+'-'+s.slice(9,13)}
-function showStartScreen(){previewId=makePreviewId();show('<h1>OCTO-TRIS</h1><div>STACK THE ARMS<br>CLEAR THE INK</div><label for="startName" style="font-size:7px">CHOOSE YOUR NICKNAME</label><input id="startName" maxlength="16" autocomplete="nickname" value="'+escapeHtml(nickname)+'"><div id="startPreview">LIVE ID PREVIEW<br>'+previewId+'</div><button id="startPlay">PLAY GAME</button><div style="font-size:6px">YOUR ID PREVIEW UPDATES AS YOU TYPE.<br>YOUR PERMANENT ID IS SAVED WHEN YOU PLAY.</div>');const input=$('startName'),preview=$('startPreview');input.addEventListener('input',()=>{nickname=input.value.trim().replace(/[^a-zA-Z0-9 _-]/g,'').slice(0,16);previewId=makePreviewId();preview.innerHTML='LIVE ID PREVIEW<br>'+escapeHtml(previewId)});$('startPlay').onclick=()=>{const v=input.value.trim().replace(/[^a-zA-Z0-9 _-]/g,'').slice(0,16);if(!v){input.focus();return}$('nickname').value=v;nickname=v;try{localStorage.setItem('octo-nickname',v)}catch(e){}start()}}
+function showStartScreen(){previewId=makePreviewId();show('<h1>OCTO-TRIS</h1><div>STACK THE ARMS<br>CLEAR THE INK</div><label for="startName" style="font-size:7px">CHOOSE YOUR NICKNAME</label><input id="startName" maxlength="16" autocomplete="nickname" value="'+escapeHtml(nickname)+'"><div id="startPreview">LIVE ID PREVIEW<br>'+previewId+'</div><button id="startPlay">PLAY GAME</button><div style="font-size:6px">YOUR PLAYER ID IS CREATED WHEN YOU PLAY.</div>');const input=$('startName'),preview=$('startPreview');input.addEventListener('input',()=>{nickname=input.value.trim().replace(/[^a-zA-Z0-9 _-]/g,'').slice(0,16);previewId=makePreviewId();preview.innerHTML='LIVE ID PREVIEW<br>'+escapeHtml(previewId)});$('startPlay').onclick=()=>{const v=input.value.trim().replace(/[^a-zA-Z0-9 _-]/g,'').slice(0,16);if(!v){input.focus();return}$('nickname').value=v;nickname=v;try{localStorage.setItem('octo-nickname',v)}catch(e){}start()}}
 async function ensurePlayer(name){if(playerId&&octavioId){await updatePlayerNickname(name);return}const r=await sb('rpc/octotris_register_player',{method:'POST',body:JSON.stringify({p_nickname:name})});playerId=r.player_id;octavioId=r.octavio_id;try{localStorage.setItem('octo-player-id',playerId);localStorage.setItem('octo-player-octavio-id',octavioId);localStorage.setItem('octo-nickname',name)}catch(e){}}
 async function updatePlayerNickname(name){if(!playerId||!octavioId)return;await sb('rpc/octotris_update_nickname',{method:'POST',body:JSON.stringify({p_player_id:playerId,p_octavio_id:octavioId,p_nickname:name})});try{localStorage.setItem('octo-nickname',name)}catch(e){}}
 function renderProfile(){const el=$('lbProfile');if(!playerId||!octavioId){el.innerHTML='PLAYER PROFILE<br>Play your first game to create your permanent Octavio ID.';return}el.innerHTML='MY PLAYER PROFILE<br>'+escapeHtml(nickname)+'<br>OCTAVIO ID<br><strong>'+escapeHtml(octavioId)+'</strong><br><button id="copyOctoId">COPY ID</button><br><small>Keep your Octavio ID safe. You may need it to claim prizes.</small>';$('copyOctoId').onclick=async()=>{try{await navigator.clipboard.writeText(octavioId);$('copyOctoId').textContent='COPIED!'}catch(e){$('lbStatus').textContent='Copy unavailable. Select and copy your ID above.'}}}
