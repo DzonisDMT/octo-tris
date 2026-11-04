@@ -79,7 +79,7 @@ canvas{display:block;width:100%;border:2px solid var(--ink)}
     </div>
     <div class="ab"><button id="bB">B</button><button id="bA">A</button></div>
   </div>
-  <div class="hint"><button id="bP">PAUSE</button><br>A TURN &middot; B TURN BACK &middot; &#9650; DROP<br><button id="lbBtn">LEADERBOARD / PLAYER</button></div><div class="version">OCTO-TRIS v0.6.1</div>
+  <div class="hint"><button id="bP">PAUSE</button><br>A TURN &middot; B TURN BACK &middot; &#9650; DROP<br><button id="lbBtn">LEADERBOARD / PLAYER</button></div><div class="version">OCTO-TRIS v0.6.2</div>
 </div>
 <div id="lbModal"><div class="lbPanel"><button class="lbClose" id="lbClose">CLOSE</button><h2>OCTO-TRIS LEADERBOARD</h2>
 <label for="nickname">PLAYER NICKNAME</label><input id="nickname" maxlength="16" autocomplete="nickname" placeholder="Your nickname">
@@ -199,7 +199,12 @@ function spawn(){
 }
 function startMirrorRoom(){if(mirrorRoomUsed)return;mirrorRoomUsed=true;mirrorActive=true;mirrorEnds=performance.now()+60000;mirrorBonus=0;powerStatus('MIRROR ROOM! 60 SECONDS · CONTROLS REVERSED · 2X SPEED');tone(220,.5,'sawtooth',.1,0,880)}
 function finishMirrorRoom(){if(!mirrorActive)return;mirrorActive=false;const bonus=safeInt(mirrorBonus);addScore(bonus);mirrorBonus=0;mirrorEnds=0;if($('msg').textContent==='MIRROR MODE'){$('msg').textContent='';$('msg').style.color='var(--btn)'}powerStatus('MIRROR ROOM COMPLETE! +'+bonus+' BONUS POINTS');hud();tone(880,.35,'sine',.12,0,440)}
-function moveVertical(d){if(!pieceHit(p.m,p.x,p.y+d)){p.y+=d;if(d>0)addScore(1);hud()}else if(d>0)lock()}
+function moveVertical(d){
+  const ny=p.y+d;
+  // Mirrored soft-drop moves up. Stop at the top row the way a normal drop stops at the floor — never park the piece above the visible board.
+  if(d<0){let above=false;each(p.m,(r)=>{if(ny+r<0)above=true});if(above)return}
+  if(!pieceHit(p.m,p.x,ny)){p.y=ny;if(d>0)addScore(1);hud()}else if(d>0)lock();
+}
 function stampPiece(){each(p.m,(r,c,v)=>{if(p.y+r>=0)bd[p.y+r][p.x+c]={c:p.c,e:v==2}})}
 function clearFullRows(){let n=0;for(let j=H-1;j>=0;j--)if(bd[j].every(v=>v)){splat(j);bd.splice(j,1);bd.unshift(Array(W).fill(0));n++;j++}return n}
 function lock(){sfx('lock');
@@ -344,38 +349,49 @@ function draw(){
   const preview=pendingSpecials.length?{m:[[1]],c:pendingSpecials[0]==='rainbow'?1:7,special:pendingSpecials[0]}:nxt;
   if(preview){const ox=(4-preview.m[0].length)*C/2,oy=(3-preview.m.length)*C/2;each(preview.m,(r,c,v)=>pieceCell(nx,ox+c*C,oy+r*C,preview,v==2))}
 }
-const lrSrc={L:{key:false,pad:false},R:{key:false,pad:false}};
-let lrKey=null,lrAcc=0,lrArmed=false;
-function lrDown(k){return lrSrc[k].key||lrSrc[k].pad}
-function pressLR(k,src){
-  const already=lrDown(k);
-  lrSrc[k][src]=true;
+const HOLD_KEYS=['L','R','U','D','KU','KD'];
+const holdSrc={};HOLD_KEYS.forEach(k=>holdSrc[k]={key:false,pad:false});
+let holdOrder=[],holdKey=null,holdAcc=0,holdArmed=false;
+function dirDown(k){return holdSrc[k].key||holdSrc[k].pad}
+function doHold(k,initial){
+  if(state!=='play')return;
+  if(k==='KD'){down(true);return}
+  if(k==='KU'){turn();return}
+  // Simple-room Up is one hard drop. Mirror Up is a one-row step and repeats.
+  if(k==='U'&&!mirrorActive){if(initial)act('U');return}
+  act(k);
+}
+function pressDir(k,src){
+  const already=dirDown(k);
+  holdSrc[k][src]=true;
   if(already)return;
-  lrKey=k;lrAcc=0;lrArmed=false;
-  if(state==='play')act(k);
+  holdOrder=holdOrder.filter(x=>x!==k);holdOrder.push(k);
+  holdKey=k;holdAcc=0;holdArmed=false;
+  doHold(k,true);
 }
-function releaseLR(k,src){
-  if(!lrSrc[k][src])return;
-  lrSrc[k][src]=false;
-  if(lrDown(k))return;
-  const other=k==='L'?'R':'L';
-  if(lrDown(other)){if(lrKey!==other){lrKey=other;lrAcc=0;lrArmed=false}}
-  else lrKey=null;
+function releaseDir(k,src){
+  if(!holdSrc[k][src])return;
+  holdSrc[k][src]=false;
+  if(dirDown(k))return;
+  holdOrder=holdOrder.filter(x=>x!==k);
+  if(holdKey!==k)return;
+  holdKey=holdOrder.length?holdOrder[holdOrder.length-1]:null;holdAcc=0;holdArmed=false;
 }
-function tickLR(dt){
-  if(state!=='play'||!lrKey)return;
-  lrAcc+=dt;
-  if(!lrArmed){
-    if(lrAcc<160)return;
-    lrArmed=true;lrAcc-=160;
+function holdRepeats(k){return k&&!(k==='U'&&!mirrorActive)}
+function tickHold(dt){
+  if(state!=='play'||!holdRepeats(holdKey))return;
+  holdAcc+=dt;
+  if(!holdArmed){
+    if(holdAcc<160)return;
+    holdArmed=true;holdAcc-=160;
   }
-  while(lrAcc>=55&&state==='play'&&lrKey){lrAcc-=55;act(lrKey)}
+  while(holdAcc>=55&&state==='play'&&holdRepeats(holdKey)){holdAcc-=55;doHold(holdKey,false)}
 }
 function loop(t){
   requestAnimationFrame(loop);
   if(state==='play'){
     if(mirrorActive&&t>=mirrorEnds)finishMirrorRoom();
-    tickLR(Math.min(80,Math.max(0,t-last)));
+    tickHold(Math.min(80,Math.max(0,t-last)));
     acc+=t-last;
     const base=Math.max(90,800-(level-1)*70),pieceSpeed=p?.special==='slow'?3:p?.special==='levelup'?0.5:1,sp=base*(t<slowUntil?2.4:1)*pieceSpeed*(mirrorActive?0.5:1);
     if(acc>=sp){acc=0;down(false)}
@@ -384,17 +400,18 @@ function loop(t){
 }
 function hold(el,k,rep){
   let to,iv,captured=false;
+  const stepped=k==='L'||k==='R'||k==='U'||k==='D';
   const stop=e=>{
     if(e&&e.type==='pointerleave'&&captured)return;
     captured=false;clearTimeout(to);clearInterval(iv);el.classList.remove('on');
-    if(k==='L'||k==='R')releaseLR(k,'pad');
+    if(stepped)releaseDir(k,'pad');
   };
   el.addEventListener('pointerdown',e=>{
     e.preventDefault();
     try{el.setPointerCapture(e.pointerId);captured=true}catch(_){captured=false}
     if(navigator.vibrate)navigator.vibrate(8);
     el.classList.add('on');
-    if(k==='L'||k==='R')pressLR(k,'pad');
+    if(stepped)pressDir(k,'pad');
     else{act(k);if(rep){to=setTimeout(()=>{iv=setInterval(()=>act(k),55)},160)}}
   });
   ['pointerup','pointercancel','pointerleave','lostpointercapture'].forEach(ev=>el.addEventListener(ev,stop));
@@ -404,28 +421,26 @@ hold($('bL'),'L',1);hold($('bR'),'R',1);hold($('bD'),'D',1);
 hold($('bU'),'U');hold($('bA'),'A');hold($('bB'),'Z');hold($('bP'),'P');
 $('mu').onclick=()=>{mute=!mute;$('mu').textContent=mute?'SND OFF':'SND ON'};
 ov.addEventListener('pointerdown',e=>{if(state==='title'&&e.target.closest('#startName,#startPlay'))return;if(state==='title'||state==='over')act('A');else if(state==='pause')pause()});
+function typingTarget(e){return e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')}
 addEventListener('keydown',e=>{
   if(e.key==='Enter'&&e.target&&e.target.id==='startName')return;
-  if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
-    const typing=e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA');
-    if(typing)return;
-    e.preventDefault();
-    pressLR(e.key==='ArrowLeft'?'L':'R','key');
-    return;
-  }
-  if(mirrorActive&&(e.key==='ArrowUp'||e.key==='ArrowDown')){
-    e.preventDefault();
-    if(state==='play'){if(e.key==='ArrowUp')turn();else down(true)}
-    return;
-  }
-  const m={ArrowDown:'D',ArrowUp:'A',x:'A',' ':'U',p:'P',z:'Z',Enter:'A'}[e.key];
+  if(typingTarget(e)&&(e.key==='ArrowLeft'||e.key==='ArrowRight'||e.key==='ArrowUp'||e.key==='ArrowDown'||e.key===' '))return;
+  if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();pressDir(e.key==='ArrowLeft'?'L':'R','key');return}
+  // PC up/down stay unmirrored: Up rotates, Down soft-drops toward the floor. Both repeat on the shared DAS clock.
+  if(e.key==='ArrowUp'){e.preventDefault();pressDir('KU','key');return}
+  if(e.key==='ArrowDown'){e.preventDefault();pressDir('KD','key');return}
+  if(e.key===' '){e.preventDefault();pressDir('U','key');return}
+  const m={x:'A',p:'P',z:'Z',Enter:'A'}[e.key];
   if(m){e.preventDefault();act(m)}
 });
 addEventListener('keyup',e=>{
-  if(e.key==='ArrowLeft')releaseLR('L','key');
-  else if(e.key==='ArrowRight')releaseLR('R','key');
+  if(e.key==='ArrowLeft')releaseDir('L','key');
+  else if(e.key==='ArrowRight')releaseDir('R','key');
+  else if(e.key==='ArrowUp')releaseDir('KU','key');
+  else if(e.key==='ArrowDown')releaseDir('KD','key');
+  else if(e.key===' ')releaseDir('U','key');
 });
-addEventListener('blur',()=>{releaseLR('L','key');releaseLR('R','key');releaseLR('L','pad');releaseLR('R','pad')});
+addEventListener('blur',()=>{HOLD_KEYS.forEach(k=>{releaseDir(k,'key');releaseDir(k,'pad')})});
 
 
 function makePreviewId(){const b=new Uint8Array(8);crypto.getRandomValues(b);const s=Array.from(b,x=>x.toString(16).padStart(2,'0')).join('').toUpperCase();return 'OCTO-'+s.slice(0,5)+'-'+s.slice(5,9)+'-'+s.slice(9,13)}
