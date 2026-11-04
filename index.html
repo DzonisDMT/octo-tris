@@ -94,7 +94,10 @@ const cv=$('b'),x=cv.getContext('2d'),nx=$('n').getContext('2d'),ov=$('ov');
 cv.width=W*C;cv.height=H*C;
 const COL=['#e8601c','#f58a3c','#c93f2a','#ffb36b','#7a2e5a','#2b5a8a','#f0d36a'];
 const SH=[[[1,1,1,1]],[[1,1],[1,1]],[[0,1,0],[1,1,1]],[[0,1,1],[1,1,0]],[[1,1,0],[0,1,1]],[[1,0,0],[1,1,1]],[[0,0,1],[1,1,1]]];
-let bd,p,nxt,score,lines,level,state='title',acc=0,last=0,bag=[],best=0,goldenBrickUsed=false;
+let bd,p,nxt,score=0,lines,level,state='title',acc=0,last=0,bag=[],best=0,goldenBrickUsed=false;
+function safeInt(v){const n=Number(v);return Number.isFinite(n)?Math.max(0,Math.floor(n)):0}
+function addScore(v){score=safeInt(safeInt(score)+safeInt(v))}
+function linePoints(n,lv){const k=safeInt(n),m=safeInt(lv)||1,t=[0,100,300,500,800];return (k<t.length?t[k]:800+(k-4)*300)*m}
 const powerups={};let slowUntil=0,pendingSpecials=[];
 let nickname='Player',gamesPlayed=0,leaderPeriod='daily',lastScoreSubmitted=0,playerId=null,octavioId=null,previewId='';
 let mirrorActive=false,mirrorRoomUsed=false,mirrorEnds=0,mirrorBonus=0;
@@ -153,8 +156,8 @@ function spawn(){
   if(hit(p.m,p.x,p.y))end();
 }
 function startMirrorRoom(){if(mirrorRoomUsed)return;mirrorRoomUsed=true;mirrorActive=true;mirrorEnds=performance.now()+60000;mirrorBonus=0;powerStatus('MIRROR ROOM! 60 SECONDS · CONTROLS REVERSED · 2X SPEED');tone(220,.5,'sawtooth',.1,0,880)}
-function finishMirrorRoom(){if(!mirrorActive)return;mirrorActive=false;score+=mirrorBonus;mirrorEnds=0;powerStatus('MIRROR ROOM COMPLETE! +'+mirrorBonus+' BONUS POINTS');hud();tone(880,.35,'sine',.12,0,440)}
-function moveVertical(d){if(!pieceHit(p.m,p.x,p.y+d)){p.y+=d;if(d>0)score+=1;hud()}else if(d>0)lock()}
+function finishMirrorRoom(){if(!mirrorActive)return;mirrorActive=false;const bonus=safeInt(mirrorBonus);addScore(bonus);mirrorBonus=0;mirrorEnds=0;powerStatus('MIRROR ROOM COMPLETE! +'+bonus+' BONUS POINTS');hud();tone(880,.35,'sine',.12,0,440)}
+function moveVertical(d){if(!pieceHit(p.m,p.x,p.y+d)){p.y+=d;if(d>0)addScore(1);hud()}else if(d>0)lock()}
 function lock(){sfx('lock');
   let n=0;
   if(p.special){
@@ -178,15 +181,15 @@ function lock(){sfx('lock');
     for(let j=H-1;j>=0;j--)if(bd[j].every(v=>v)){splat(j);bd.splice(j,1);bd.unshift(Array(W).fill(0));n++;j++}
   }
   if(n){
-    const oldLines=lines;sfx('clear',n);shake(n);score+=[0,100,300,500,800][n]*level;lines+=n;awardPowerups(oldLines,lines);if(mirrorActive)mirrorBonus+=250*n;if(!mirrorRoomUsed&&oldLines<11&&lines>=11)startMirrorRoom();
+    const oldLines=lines;sfx('clear',n);shake(n);addScore(linePoints(n,level));lines+=n;awardPowerups(oldLines,lines);if(mirrorActive)mirrorBonus=safeInt(mirrorBonus)+250*safeInt(n);if(!mirrorRoomUsed&&oldLines<11&&lines>=11)startMirrorRoom();
     if(oldLines<2&&lines>=2&&!goldenBrickUsed){goldenBrickUsed=true;pendingSpecials.unshift('golden');powerStatus('GOLDEN BRICK UNLOCKED! NEXT PIECE!')}
     const ol=level;level=1+(lines/10|0);if(level>ol){setTimeout(()=>sfx('level'),450);mascot()}
-    $('msg').textContent=p.special==='golden'?'GOLDEN ROW!':['','INK!','DOUBLE INK!','TRIPLE INK!','OCTO-INK!!'][n];
+    $('msg').textContent=p.special==='golden'?'GOLDEN ROW!':(['','INK!','DOUBLE INK!','TRIPLE INK!','OCTO-INK!!'][n]||'OCTO-INK!!');
     setTimeout(()=>$('msg').textContent='',900);
   }
   hud();spawn();
 }
-function hud(){$('sc').textContent=score;$('ln').textContent=lines;$('lv').textContent=level}
+function hud(){score=safeInt(score);$('sc').textContent=score;$('ln').textContent=lines;$('lv').textContent=level}
 function show(h){ov.innerHTML=h;ov.classList.remove('hide')}
 async function start(){
   try{await ensurePlayer(nickname)}catch(e){show('<h1>REGISTRATION ERROR</h1><div>'+escapeHtml(e.message)+'</div><div>PLEASE TRY AGAIN</div>');return}
@@ -198,15 +201,16 @@ async function start(){
 function end(){
   if(mirrorActive)finishMirrorRoom();
   state='over';sfx('over');
+  score=safeInt(score);
   if(score>best){best=score;try{localStorage.setItem('octo-best',best)}catch(e){}}
   submitScore(score);
   show('<h1>INKED OUT!</h1><div>SCORE '+score+'<br>BEST '+best+'<br>GAMES '+gamesPlayed+'</div><div>PRESS A</div><div style="font-size:7px">PLAYER '+escapeHtml(nickname)+'</div><div style="font-size:7px">LEADERBOARD BUTTON BELOW</div>');
 }
 function down(manual){
   const blocked=pieceHit(p.m,p.x,p.y+1);
-  if(!blocked){p.y++;if(manual)score++;hud()}else lock();
+  if(!blocked){p.y++;if(manual)addScore(1);hud()}else lock();
 }
-function drop(){sfx('drop');while(!pieceHit(p.m,p.x,p.y+1)){p.y++;score+=2}hud();lock()}
+function drop(){sfx('drop');while(!pieceHit(p.m,p.x,p.y+1)){p.y++;addScore(2)}hud();lock()}
 function move(d){if(!pieceHit(p.m,p.x+d,p.y)){p.x+=d;sfx('move')}}
 function turn(ccw){let r=rot(p.m);if(ccw)r=rot(rot(r));sfx('rot');for(const k of [0,-1,1,-2,2])if(!pieceHit(r,p.x+k,p.y)){p.m=r;p.x+=k;break}}
 function pause(){
@@ -318,7 +322,7 @@ function renderProfile(){const el=$('lbProfile');if(!playerId||!octavioId){el.in
 function powerStatus(t){$('powerStatus').textContent=t}
 function awardPowerups(before,after){const cycle=20,rewards=[{at:5,key:'slow'},{at:8,key:'tentacle'},{at:10,key:'bomb'},{at:12,key:'levelup'},{at:15,key:'lightning'},{at:20,key:'rainbow'}];for(let base=Math.floor(before/cycle)*cycle;base<=after;base+=cycle){for(const reward of rewards){const milestone=base+reward.at;if(milestone>before&&milestone<=after){pendingSpecials.push(reward.key);powerStatus(reward.key.toUpperCase()+' BRICK UNLOCKED! NEXT PIECE!')}}}}
 function compactColumns(){for(let c=0;c<W;c++){const vals=[];for(let r=H-1;r>=0;r--)if(bd[r][c])vals.push(bd[r][c]);for(let r=H-1;r>=0;r--)bd[r][c]=vals[H-1-r]||0}}
-function clearPowerCells(cells,label){let removed=0;for(const [r,c] of cells){if(r>=0&&r<H&&c>=0&&c<W&&bd[r][c]){bd[r][c]=0;removed++}}if(removed){compactColumns();score+=removed*25;hud();sfx('clear',1);powerStatus(label+': '+removed+' BRICKS CLEARED')}else powerStatus(label+': NO BRICKS IN RANGE')}
+function clearPowerCells(cells,label){let removed=0;for(const [r,c] of cells){if(r>=0&&r<H&&c>=0&&c<W&&bd[r][c]){bd[r][c]=0;removed++}}if(removed){compactColumns();addScore(safeInt(removed)*25);hud();sfx('clear',1);powerStatus(label+': '+removed+' BRICKS CLEARED')}else powerStatus(label+': NO BRICKS IN RANGE')}
 function activateFallingPower(kind,row,col,color,shapeCells=[]){
   if(kind==='slow'){powerStatus('SLOW MOTION PIECE LANDED');tone(660,.25,'sine',.12,0,330);return}
   if(kind==='levelup'){powerStatus('2X SPEED PIECE LANDED!');tone(880,.2,'square',.1,0,1320);return}
@@ -351,6 +355,7 @@ async function sb(path,options={}){
   return r.status===204?null:r.json();
 }
 async function submitScore(value){
+  value=safeInt(value);
   if(!SUPABASE_URL||!SUPABASE_ANON_KEY||!nickname||value<=0||!playerId)return;
   try{await sb('octotris_scores',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({nickname,player_id:playerId,score:value,lines:lines,level:level})});lastScoreSubmitted=value}
   catch(e){console.warn(e)}
@@ -375,7 +380,7 @@ $('saveNick').onclick=()=>{saveNickname();loadLeaderboard(leaderPeriod)};
 $('tabDaily').onclick=()=>loadLeaderboard('daily');
 $('tabWeekly').onclick=()=>loadLeaderboard('weekly');
 $('tabAll').onclick=()=>loadLeaderboard('all');
-$('shareScore').onclick=()=>{const text='I scored '+(score||best)+' in OCTO-TRIS! Can you beat me? 🐙\n\nPlay OCTO-TRIS: https://octo-tris.vercel.app\nFollow @minimaoctavio';window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(text),'_blank','noopener')};
+$('shareScore').onclick=()=>{const text='I scored '+(safeInt(score)||safeInt(best))+' in OCTO-TRIS! Can you beat me? 🐙\n\nPlay OCTO-TRIS: https://octo-tris.vercel.app\nFollow @minimaoctavio';window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(text),'_blank','noopener')};
 
 mascot();showStartScreen();
 requestAnimationFrame(loop);
