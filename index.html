@@ -195,7 +195,7 @@ function spawn(){
     powerStatus(special.toUpperCase()+' BRICK INCOMING!');tone(740,.16,'sine',.1,0,1100)
   }else{p=nxt||rnd();nxt=rnd()}
   p.x=(W-p.m[0].length)>>1;p.y=0;
-  if(hit(p.m,p.x,p.y))end();
+  if(pieceHit(p.m,p.x,p.y))end();
 }
 function startMirrorRoom(){if(mirrorRoomUsed)return;mirrorRoomUsed=true;mirrorActive=true;mirrorEnds=performance.now()+60000;mirrorBonus=0;powerStatus('MIRROR ROOM! 60 SECONDS · CONTROLS REVERSED · 2X SPEED');tone(220,.5,'sawtooth',.1,0,880)}
 function finishMirrorRoom(){if(!mirrorActive)return;mirrorActive=false;const bonus=safeInt(mirrorBonus);addScore(bonus);mirrorBonus=0;mirrorEnds=0;if($('msg').textContent==='MIRROR MODE'){$('msg').textContent='';$('msg').style.color='var(--btn)'}powerStatus('MIRROR ROOM COMPLETE! +'+bonus+' BONUS POINTS');hud();tone(880,.35,'sine',.12,0,440)}
@@ -497,7 +497,7 @@ async function loadLeaderboard(period){
   try{
     const since=period==='daily'?new Date(Date.now()-86400000).toISOString():period==='weekly'?new Date(Date.now()-7*86400000).toISOString():null;
     const query='select=nickname,score,created_at,masked_octavio_id&order=score.desc&limit=20'+(since?'&created_at=gte.'+encodeURIComponent(since):'');
-    const rows=await sb('octotris_public_scores?'+query);
+    const rows=await sb('rpc/octotris_leaderboard',{method:'POST',body:JSON.stringify({p_period:period,p_limit:20})});
     $('lbRows').innerHTML=rows.length?rows.map((r,i)=>'<div class="lbRow"><span>'+(i+1)+'. '+escapeHtml(r.nickname)+'<br><small>'+escapeHtml(r.masked_octavio_id||'GUEST')+'</small></span><b>'+Number(r.score).toLocaleString()+'</b></div>').join(''):'No scores yet. Be the first!';
     $('lbStatus').textContent='Your best: '+best+' · Games played on this device: '+gamesPlayed;
   }catch(e){$('lbRows').textContent='Global leaderboard is not connected yet.';$('lbStatus').textContent=e.message+' Your personal best and games played are saved locally.'}
