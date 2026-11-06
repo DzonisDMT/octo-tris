@@ -195,7 +195,7 @@ function spawn(){
     powerStatus(special.toUpperCase()+' BRICK INCOMING!');tone(740,.16,'sine',.1,0,1100)
   }else{p=nxt||rnd();nxt=rnd()}
   p.x=(W-p.m[0].length)>>1;p.y=0;
-  if(hit(p.m,p.x,p.y))end();
+  if(pieceHit(p.m,p.x,p.y))end();
 }
 function startMirrorRoom(){if(mirrorRoomUsed)return;mirrorRoomUsed=true;mirrorActive=true;mirrorEnds=performance.now()+60000;mirrorBonus=0;powerStatus('MIRROR ROOM! 60 SECONDS · CONTROLS REVERSED · 2X SPEED');tone(220,.5,'sawtooth',.1,0,880)}
 function finishMirrorRoom(){if(!mirrorActive)return;mirrorActive=false;const bonus=safeInt(mirrorBonus);addScore(bonus);mirrorBonus=0;mirrorEnds=0;if($('msg').textContent==='MIRROR MODE'){$('msg').textContent='';$('msg').style.color='var(--btn)'}powerStatus('MIRROR ROOM COMPLETE! +'+bonus+' BONUS POINTS');hud();tone(880,.35,'sine',.12,0,440)}
