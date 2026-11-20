@@ -79,7 +79,7 @@ canvas{display:block;width:100%;border:2px solid var(--ink)}
     </div>
     <div class="ab"><button id="bB">B</button><button id="bA">A</button></div>
   </div>
-  <div class="hint"><button id="bP">PAUSE</button><br>A TURN &middot; B TURN BACK &middot; &#9650; DROP<br><button id="lbBtn">LEADERBOARD / PLAYER</button></div><div class="version">OCTO-TRIS v0.6.2</div>
+  <div class="hint"><button id="bP">PAUSE</button><br>A TURN &middot; B TURN BACK &middot; &#9650; DROP<br><button id="lbBtn">LEADERBOARD / PLAYER</button></div><div class="version">OCTO-TRIS v0.6.3</div>
 </div>
 <div id="lbModal"><div class="lbPanel"><button class="lbClose" id="lbClose">CLOSE</button><h2>OCTO-TRIS LEADERBOARD</h2>
 <label for="nickname">PLAYER NICKNAME</label><input id="nickname" maxlength="16" autocomplete="nickname" placeholder="Your nickname">
@@ -99,11 +99,9 @@ function safeInt(v){const n=Number(v);return Number.isFinite(n)?Math.max(0,Math.
 function addScore(v){score=safeInt(safeInt(score)+safeInt(v))}
 function linePoints(n,lv){const k=safeInt(n),m=safeInt(lv)||1,t=[0,100,300,500,800];return (k<t.length?t[k]:800+(k-4)*300)*m}
 const powerups={};let slowUntil=0,pendingSpecials=[];
-let nickname='Player',gamesPlayed=0,leaderPeriod='daily',lastScoreSubmitted=0,playerId=null,octavioId=null,previewId='';
+let nickname='Player',gamesPlayed=0,leaderPeriod='daily',lastScoreSubmitted=0,octavioId=null,previewId='';
 let mirrorActive=false,mirrorRoomUsed=false,mirrorEnds=0,mirrorBonus=0,mirrorLabel='';
-const SUPABASE_URL='https://tverxdvmxclhunvmojaf.supabase.co';
-const SUPABASE_ANON_KEY='sb_publishable__pDaXKlhJ9tH74hY_o96GQ_N8oS2B_Z';
-try{nickname=localStorage.getItem('octo-nickname')||'Player';gamesPlayed=+(localStorage.getItem('octo-games')||0);playerId=localStorage.getItem('octo-player-id');octavioId=localStorage.getItem('octo-player-octavio-id');$('nickname').value=nickname}catch(e){}
+try{nickname=localStorage.getItem('octo-nickname')||'Player';gamesPlayed=+(localStorage.getItem('octo-games')||0);octavioId=localStorage.getItem('octo-player-octavio-id');$('nickname').value=nickname}catch(e){}
 let AC,mute=false,primeEl=null,audioPrimed=false;
 const toneQueue=[];
 // Short non-silent tick. iOS Safari keeps Web Audio on the silent-switch "ambient" session until an HTML audio element plays inside a user gesture.
@@ -243,9 +241,10 @@ function lock(){sfx('lock');
 }
 function hud(){score=safeInt(score);$('sc').textContent=score;$('ln').textContent=lines;$('lv').textContent=level}
 function show(h){ov.innerHTML=h;ov.classList.remove('hide')}
+function overHtml(shown,note){return '<h1>INKED OUT!</h1><div>SCORE '+shown+'<br>BEST '+best+'<br>GAMES '+gamesPlayed+'</div><div>PRESS A</div><div style="font-size:7px">PLAYER '+escapeHtml(nickname)+'</div><div style="font-size:7px">'+escapeHtml(note)+'</div><div style="font-size:7px">LEADERBOARD BUTTON BELOW</div>'}
 async function start(){
   unlockAudio();
-  try{await ensurePlayer(nickname)}catch(e){show('<h1>REGISTRATION ERROR</h1><div>'+escapeHtml(e.message)+'</div><div>PLEASE TRY AGAIN</div>');return}
+  try{await ensurePlayer(nickname)}catch(e){}
   gamesPlayed++;try{localStorage.setItem('octo-games',gamesPlayed)}catch(e){}
   bd=Array.from({length:H},()=>Array(W).fill(0));
   score=0;lines=0;level=1;nxt=null;acc=0;pendingSpecials=[];goldenBrickUsed=false;slowUntil=0;mirrorActive=false;mirrorRoomUsed=false;mirrorEnds=0;mirrorBonus=0;powerStatus('CLEAR ROWS TO RELEASE SPECIAL BRICKS!');hud();
@@ -256,8 +255,21 @@ function end(){
   state='over';sfx('over');
   score=safeInt(score);
   if(score>best){best=score;try{localStorage.setItem('octo-best',best)}catch(e){}}
-  submitScore(score);
-  show('<h1>INKED OUT!</h1><div>SCORE '+score+'<br>BEST '+best+'<br>GAMES '+gamesPlayed+'</div><div>PRESS A</div><div style="font-size:7px">PLAYER '+escapeHtml(nickname)+'</div><div style="font-size:7px">LEADERBOARD BUTTON BELOW</div>');
+  const snapshot={score,lines:safeInt(lines),level:safeInt(level)||1,name:nickname,id:octavioId};
+  show(overHtml(snapshot.score,'SAVING SCORE...'));
+  saveFinishedGame(snapshot);
+}
+async function saveFinishedGame(snapshot){
+  let note='SCORE SAVED ON THIS DEVICE';
+  try{
+    if(snapshot.score>0){
+      let id=snapshot.id;
+      if(!id){const player=await ensurePlayer(snapshot.name);id=player.octavioId}
+      await submitScore(snapshot.score,snapshot.lines,snapshot.level,id);
+      note='SCORE SENT TO THE GLOBAL BOARD';
+    }
+  }catch(e){note='SCORE SAVED ON THIS DEVICE'}
+  if(state==='over')show(overHtml(snapshot.score,note));
 }
 function down(manual){
   const blocked=pieceHit(p.m,p.x,p.y+1);
@@ -445,9 +457,7 @@ addEventListener('blur',()=>{HOLD_KEYS.forEach(k=>{releaseDir(k,'key');releaseDi
 
 function makePreviewId(){const b=new Uint8Array(8);crypto.getRandomValues(b);const s=Array.from(b,x=>x.toString(16).padStart(2,'0')).join('').toUpperCase();return 'OCTO-'+s.slice(0,5)+'-'+s.slice(5,9)+'-'+s.slice(9,13)}
 function showStartScreen(){previewId=makePreviewId();show('<h1>OCTO-TRIS</h1><div>STACK THE ARMS<br>CLEAR THE INK</div><label for="startName" style="font-size:7px">CHOOSE YOUR NICKNAME</label><input id="startName" maxlength="16" autocomplete="nickname" value="'+escapeHtml(nickname)+'"><div id="startPreview">LIVE ID PREVIEW<br>'+previewId+'</div><button id="startPlay">PLAY GAME</button><div style="font-size:6px">YOUR PLAYER ID IS CREATED WHEN YOU PLAY.</div>');const input=$('startName'),preview=$('startPreview');input.addEventListener('input',()=>{nickname=input.value.trim().replace(/[^a-zA-Z0-9 _-]/g,'').slice(0,16);previewId=makePreviewId();preview.innerHTML='LIVE ID PREVIEW<br>'+escapeHtml(previewId)});$('startPlay').onclick=()=>{const v=input.value.trim().replace(/[^a-zA-Z0-9 _-]/g,'').slice(0,16);if(!v){input.focus();return}$('nickname').value=v;nickname=v;try{localStorage.setItem('octo-nickname',v)}catch(e){}start()}}
-async function ensurePlayer(name){if(playerId&&octavioId){await updatePlayerNickname(name);return}const r=await sb('rpc/octotris_register_player',{method:'POST',body:JSON.stringify({p_nickname:name})});playerId=r.player_id;octavioId=r.octavio_id;try{localStorage.setItem('octo-player-id',playerId);localStorage.setItem('octo-player-octavio-id',octavioId);localStorage.setItem('octo-nickname',name)}catch(e){}}
-async function updatePlayerNickname(name){if(!playerId||!octavioId)return;await sb('rpc/octotris_update_nickname',{method:'POST',body:JSON.stringify({p_player_id:playerId,p_octavio_id:octavioId,p_nickname:name})});try{localStorage.setItem('octo-nickname',name)}catch(e){}}
-function renderProfile(){const el=$('lbProfile');if(!playerId||!octavioId){el.innerHTML='PLAYER PROFILE<br>Play your first game to create your permanent Octavio ID.';return}el.innerHTML='MY PLAYER PROFILE<br>'+escapeHtml(nickname)+'<br>OCTAVIO ID<br><strong>'+escapeHtml(octavioId)+'</strong><br><button id="copyOctoId">COPY ID</button><br><small>Keep your Octavio ID safe. You may need it to claim prizes.</small>';$('copyOctoId').onclick=async()=>{try{await navigator.clipboard.writeText(octavioId);$('copyOctoId').textContent='COPIED!'}catch(e){$('lbStatus').textContent='Copy unavailable. Select and copy your ID above.'}}}
+function renderProfile(){const el=$('lbProfile');if(!octavioId){el.innerHTML='PLAYER PROFILE<br>Play your first game to create your permanent Octavio ID.';return}el.innerHTML='MY PLAYER PROFILE<br>'+escapeHtml(nickname)+'<br>OCTAVIO ID<br><strong>'+escapeHtml(octavioId)+'</strong><br><button id="copyOctoId">COPY ID</button><br><small>Keep your Octavio ID safe. You may need it to claim prizes.</small>';$('copyOctoId').onclick=async()=>{try{await navigator.clipboard.writeText(octavioId);$('copyOctoId').textContent='COPIED!'}catch(e){$('lbStatus').textContent='Copy unavailable. Select and copy your ID above.'}}}
 
 function powerStatus(t){$('powerStatus').textContent=t}
 function awardPowerups(before,after){const cycle=20,rewards=[{at:5,key:'slow'},{at:8,key:'tentacle'},{at:10,key:'bomb'},{at:12,key:'levelup'},{at:15,key:'lightning'},{at:20,key:'rainbow'}];for(let base=Math.floor(before/cycle)*cycle;base<=after;base+=cycle){for(const reward of rewards){const milestone=base+reward.at;if(milestone>before&&milestone<=after){pendingSpecials.push(reward.key);powerStatus(reward.key.toUpperCase()+' BRICK UNLOCKED! NEXT PIECE!')}}}}
@@ -476,31 +486,57 @@ async function saveNickname(){
   if(!v){$('lbStatus').textContent='Enter a nickname first.';return}
   nickname=v;$('nickname').value=v;
   try{localStorage.setItem('octo-nickname',v)}catch(e){}
-  if(playerId){try{await updatePlayerNickname(v);$('lbStatus').textContent='Nickname updated. Your Octavio ID stays the same.'}catch(e){$('lbStatus').textContent='Could not update nickname: '+e.message;return}}else $('lbStatus').textContent='Nickname saved. Your Octavio ID will be created when you press PLAY GAME.';
+  if(!octavioId){$('lbStatus').textContent='Nickname saved on this device. Your Octavio ID is created when you press PLAY GAME.';return}
+  try{await ensurePlayer(v);renderProfile();$('lbStatus').textContent='Nickname updated. Your Octavio ID stays the same.'}
+  catch(e){$('lbStatus').textContent=friendlyBoardError(e)}
 }
-async function sb(path,options={}){
-  if(!SUPABASE_URL||!SUPABASE_ANON_KEY)throw new Error('Global leaderboard is not connected yet. Supabase setup is required.');
-  const r=await fetch(SUPABASE_URL.replace(/\/$/,'')+'/rest/v1/'+path,{...options,headers:{apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json',...(options.headers||{})}});
-  if(!r.ok)throw new Error('Leaderboard request failed ('+r.status+').');
-  return r.status===204?null:r.json();
+function friendlyBoardError(e){
+  const msg=e&&e.message?String(e.message):'';
+  if(!msg||msg==='Load failed'||msg==='Failed to fetch'||/networkerror|network error/i.test(msg))return 'The global leaderboard is unavailable right now.';
+  return msg;
 }
-async function submitScore(value){
+function resetLabel(period){return period==='daily'?'Day resets 00:00 UTC':period==='weekly'?'Week resets Monday 00:00 UTC':'All time, no reset'}
+async function boardApi(path,options={}){
+  let response;
+  try{response=await fetch(path,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}})}
+  catch(e){throw new Error('The global leaderboard is unavailable right now.')}
+  let data={};
+  try{data=await response.json()}catch(e){data={}}
+  if(!response.ok)throw new Error(data&&data.message?data.message:'The global leaderboard is unavailable right now.');
+  return data;
+}
+async function ensurePlayer(name){
+  const send=async id=>{
+    const data=await boardApi('/api/player',{method:'POST',body:JSON.stringify({nickname:name,octavioId:id||undefined})});
+    octavioId=data.octavioId;nickname=data.nickname||name;
+    try{localStorage.setItem('octo-player-octavio-id',octavioId);localStorage.setItem('octo-nickname',nickname);localStorage.removeItem('octo-player-id')}catch(e){}
+    return data;
+  };
+  try{return await send(octavioId)}catch(e){
+    if(octavioId&&/does not look right/i.test(e.message||'')){octavioId=null;try{localStorage.removeItem('octo-player-octavio-id');localStorage.removeItem('octo-player-id')}catch(err){}return send(null)}
+    throw e;
+  }
+}
+async function submitScore(value,lineCount,levelValue,id){
   value=safeInt(value);
-  if(!SUPABASE_URL||!SUPABASE_ANON_KEY||!nickname||value<=0||!playerId)return;
-  try{await sb('octotris_scores',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({nickname,player_id:playerId,score:value,lines:lines,level:level})});lastScoreSubmitted=value}
-  catch(e){console.warn(e)}
+  if(value<=0)return;
+  await boardApi('/api/score',{method:'POST',body:JSON.stringify({octavioId:id||octavioId,score:value,lines:safeInt(lineCount),level:safeInt(levelValue)||1})});
+  lastScoreSubmitted=value;
 }
 async function loadLeaderboard(period){
   leaderPeriod=period;
   ['Daily','Weekly','All'].forEach(k=>$('tab'+k).classList.toggle('active',k.toLowerCase()===period||k==='All'&&period==='all'));
   $('lbRows').textContent='Loading...';
+  const reset=resetLabel(period);
   try{
-    const since=period==='daily'?new Date(Date.now()-86400000).toISOString():period==='weekly'?new Date(Date.now()-7*86400000).toISOString():null;
-    const query='select=nickname,score,created_at,masked_octavio_id&order=score.desc&limit=20'+(since?'&created_at=gte.'+encodeURIComponent(since):'');
-    const rows=await sb('octotris_public_scores?'+query);
-    $('lbRows').innerHTML=rows.length?rows.map((r,i)=>'<div class="lbRow"><span>'+(i+1)+'. '+escapeHtml(r.nickname)+'<br><small>'+escapeHtml(r.masked_octavio_id||'GUEST')+'</small></span><b>'+Number(r.score).toLocaleString()+'</b></div>').join(''):'No scores yet. Be the first!';
-    $('lbStatus').textContent='Your best: '+best+' · Games played on this device: '+gamesPlayed;
-  }catch(e){$('lbRows').textContent='Global leaderboard is not connected yet.';$('lbStatus').textContent=e.message+' Your personal best and games played are saved locally.'}
+    const data=await boardApi('/api/leaderboard?period='+encodeURIComponent(period));
+    const rows=Array.isArray(data.rows)?data.rows:[];
+    $('lbRows').innerHTML=rows.length?rows.map((r,i)=>'<div class="lbRow"><span>'+(i+1)+'. '+escapeHtml(r.nickname)+'<br><small>'+escapeHtml(r.maskedId||'')+'</small></span><b>'+Number(r.score).toLocaleString()+'</b></div>').join(''):'No scores yet. Be the first!';
+    $('lbStatus').textContent='Your best: '+best+' · Games on this device: '+gamesPlayed+' · '+(data.reset||reset);
+  }catch(e){
+    $('lbRows').textContent=friendlyBoardError(e);
+    $('lbStatus').textContent='Your personal best and games played are still saved on this device. · '+reset;
+  }
 }
 function openLeaderboard(){ $('lbModal').classList.add('open');$('nickname').value=nickname;renderProfile();loadLeaderboard(leaderPeriod)}
 $('lbBtn').onclick=openLeaderboard;
