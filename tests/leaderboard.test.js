@@ -14,7 +14,7 @@ const KEPT_ID = 'OCTO-4CD23-BF3B-9AS2';
 function boardAt(startMs) {
   let nowMs = startMs;
   const store = createMemoryStore();
-  const service = createLeaderboard(store, { now: () => new Date(nowMs) });
+  const service = createLeaderboard(store, { now: () => new Date(nowMs), legacyScores: [] });
   return {
     service,
     set(ms) { nowMs = ms; }
@@ -151,4 +151,23 @@ test('the game page no longer calls the dead Supabase host', () => {
   assert.equal(html.includes('/api/score'), true);
   assert.equal(html.includes('/api/leaderboard'), true);
   assert.equal(html.includes('/api/player'), true);
+});
+
+test('all-time board keeps legacy scores, merges them by masked ID, and daily/weekly ignore old ones', async () => {
+  let nowMs = Date.parse('2026-11-27T10:00:00.000Z');
+  const legacyScores = [
+    { nickname: 'Pol', maskedId: 'OCTO-9169…D592', score: 57235, lines: 86, level: 9, createdAt: '2026-11-05T04:53:19Z' },
+    { nickname: 'Adomas', maskedId: maskOctavioId(KEPT_ID), score: 3605, lines: 15, level: 2, createdAt: '2026-11-04T19:30:44Z' }
+  ];
+  const service = createLeaderboard(createMemoryStore(), { now: () => new Date(nowMs), legacyScores });
+  let all = await service.leaderboard('all');
+  assert.deepEqual(all.rows.map(r => [r.nickname, r.score]), [['Pol', 57235], ['Adomas', 3605]]);
+  assert.deepEqual((await service.leaderboard('daily')).rows, []);
+  assert.deepEqual((await service.leaderboard('weekly')).rows, []);
+  await service.register({ nickname: 'Adomas', octavioId: KEPT_ID, ip: 'phone-a' });
+  nowMs += 60000;
+  await service.submit({ octavioId: KEPT_ID, score: 5698, lines: 20, level: 3, ip: 'phone-a' });
+  all = await service.leaderboard('all');
+  assert.deepEqual(all.rows.map(r => [r.nickname, r.score]), [['Pol', 57235], ['Adomas', 5698]]);
+  assert.deepEqual((await service.leaderboard('daily')).rows.map(r => r.score), [5698]);
 });

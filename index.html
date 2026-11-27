@@ -79,7 +79,7 @@ canvas{display:block;width:100%;border:2px solid var(--ink)}
     </div>
     <div class="ab"><button id="bB">B</button><button id="bA">A</button></div>
   </div>
-  <div class="hint"><button id="bP">PAUSE</button><br>A TURN &middot; B TURN BACK &middot; &#9650; DROP<br><button id="lbBtn">LEADERBOARD / PLAYER</button></div><div class="version">OCTO-TRIS v0.6.3</div>
+  <div class="hint"><button id="bP">PAUSE</button><br>A TURN &middot; B TURN BACK &middot; &#9650; DROP<br><button id="lbBtn">LEADERBOARD / PLAYER</button></div><div class="version">OCTO-TRIS v0.6.4</div>
 </div>
 <div id="lbModal"><div class="lbPanel"><button class="lbClose" id="lbClose">CLOSE</button><h2>OCTO-TRIS LEADERBOARD</h2>
 <label for="nickname">PLAYER NICKNAME</label><input id="nickname" maxlength="16" autocomplete="nickname" placeholder="Your nickname">
@@ -265,7 +265,13 @@ async function saveFinishedGame(snapshot){
     if(snapshot.score>0){
       let id=snapshot.id;
       if(!id){const player=await ensurePlayer(snapshot.name);id=player.octavioId}
-      await submitScore(snapshot.score,snapshot.lines,snapshot.level,id);
+      try{await submitScore(snapshot.score,snapshot.lines,snapshot.level,id)}
+      catch(e){
+        // Players created on the old board have an Octavio ID the new board has not seen yet. Register it once, then retry.
+        if(!/Octavio ID|does not look right/i.test(e.message||''))throw e;
+        const player=await ensurePlayer(snapshot.name);
+        await submitScore(snapshot.score,snapshot.lines,snapshot.level,player.octavioId);
+      }
       note='SCORE SENT TO THE GLOBAL BOARD';
     }
   }catch(e){note='SCORE SAVED ON THIS DEVICE'}
